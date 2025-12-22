@@ -176,7 +176,7 @@ export default function Home() {
                 <input
                   type="number"
                   min={0}
-                  step={10}
+                  step="any"
                   value={sqft}
                   onChange={(e) => setSqft(e.target.value)}
                   placeholder={projectType === "stairs-only" ? "e.g. 14" : "e.g. 850"}
@@ -331,14 +331,23 @@ export default function Home() {
               </div>
             </div>
 
-            <div className="mt-4 rounded-lg border border-amber-500/40 bg-amber-500/5 p-3">
-              <p className="text-[11px] text-amber-200">
-                Coming soon:{" "}
-                <span className="font-semibold">
-                  camera-based floor visualizer
-                </span>{" "}
-                so you can see new floors in your real rooms before you say
-                yes.
+            <div className="mt-4 rounded-lg border border-amber-500/40 bg-amber-500/5 p-3 space-y-2">
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-amber-300">
+                Want to actually see it on your floors?
+              </p>
+              <p className="text-[11px] text-amber-100">
+                Use our experimental <span className="font-semibold">camera floor visualizer</span> to layer a few of our favorite
+                profiles over your real room and get a feel for tone, pattern and vibe before we ever bring samples out.
+              </p>
+              <a
+                href="/camera"
+                className="inline-flex w-full items-center justify-center rounded-lg border border-amber-400/60 bg-amber-300/90 px-3 py-2 text-[11px] font-semibold text-amber-950 transition hover:bg-amber-200"
+              >
+                Open camera visualizer (beta)
+              </a>
+              <p className="text-[10px] text-amber-200/80">
+                Works best on a recent iPhone or Android in good lighting. This is just a visual toy – we still confirm everything in
+                person with real samples.
               </p>
             </div>
           </div>
