@@ -1,6 +1,6 @@
 'use client';
 
-import type { PutBlobResult } from '@vercel/blob';
+import { PutBlobResult } from '@vercel/blob';
 import { useState, useRef } from 'react';
 
 export default function AvatarUploadPage() {
