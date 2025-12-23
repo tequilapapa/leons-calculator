@@ -62,7 +62,37 @@ export default function CameraVisualizerPage() {
   const [streamActive, setStreamActive] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selectedProfile, setSelectedProfile] = useState<Profile>(PROFILES[0]);
+  const handleSubmit = async (e: FormEvent) => {
+  e.preventDefault();
 
+  // basic front-end guard
+  if (!name && !contact) {
+    alert(" Before you go, What is your name? We'd like to know your project idea 🤭");
+    return;
+  }
+
+  try {
+    await fetch("/api/avatar/upload", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name,
+        contact,
+        notes,
+        profileId: activeProfile?.id ?? null,
+      }),
+    });
+  } catch (err) {
+    console.error("Error sending lead to GoHighLevel:", err);
+    // we still continue the flow even if API call fails
+  }
+
+  setSubmitted(true);
+
+  if (typeof window !== "undefined") {
+    window.open(BOOKING_URL, "_blank");
+  }
+};	
   useEffect(() => {
     let currentStream: MediaStream | null = null;
 
@@ -164,7 +194,7 @@ export default function CameraVisualizerPage() {
             Floor profiles
           </p>
           <p className="text-xs text-neutral-300">
-            Tap through Rode-inspired parquet and chevron options while you
+            Tap through parquet and chevron options while you
             point the camera at your space.
           </p>
         </div>
@@ -214,7 +244,7 @@ export default function CameraVisualizerPage() {
             Est. fully installed: {selectedProfile.estRange}
           </p>
           <p className="text-[10px] text-neutral-500 pt-1">
-            For exact pricing, we still do a site visit and a written proposal.
+            For exact pricing, schedule a site visit. A formal written proposal will then be prepared for you to review the exact promise we honor delivering your dream home 
           </p>
         </div>
       </aside>
