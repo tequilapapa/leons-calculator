@@ -72,16 +72,25 @@ export default function CameraVisualizerPage() {
   }
 
   try {
-    await fetch("/api/avatar/upload", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        name,
-        contact,
-        notes,
-        profileId: activeProfile?.id ?? null,
-      }),
-    });
+    await fetch("/api/lead", {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({
+    name,
+    email,
+    phone,
+    projectType,
+    sqft,
+    condition,
+    includeBaseboards,
+    includeFurniture,
+    includeStairs,
+    // camera / visualizer extras:
+    imageUrl,          // or array of URLs
+    notes,
+    source: "calculator", // or "camera"
+  }),
+});
   } catch (err) {
     console.error("Error sending lead to GoHighLevel:", err);
     // we still continue the flow even if API call fails
