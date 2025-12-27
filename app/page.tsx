@@ -1,7 +1,7 @@
-// @ts-nocheck
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState } from "react";
+
 type ProjectType =
   | "refinish"
   | "new-hardwood"
@@ -35,14 +35,13 @@ function calculateQuote(
     return { min: 0, max: 0 };
   }
 
-  // base price per sq ft ranges (LA luxury-friendly, tweak to taste)
   let baseMin = 0;
   let baseMax = 0;
 
   switch (projectType) {
     case "refinish":
-      baseMin = 5; // light refinish
-      baseMax = 9; // heavy repairs / color work
+      baseMin = 5;
+      baseMax = 9;
       break;
     case "new-hardwood":
       baseMin = 9;
@@ -57,24 +56,22 @@ function calculateQuote(
       baseMax = 12;
       break;
     case "stairs-only":
-      baseMin = 80; // per stair step rough
+      baseMin = 80; // per step
       baseMax = 150;
       break;
   }
 
-  // condition multipliers
   let conditionBump = 1;
   if (condition === "average") conditionBump = 1.1;
   if (condition === "heavy") conditionBump = 1.25;
 
-  // extra toggles as flat percentages
   let extrasMultiplier = 1;
   if (includeBaseboards) extrasMultiplier += 0.1;
   if (includeFurniture) extrasMultiplier += 0.1;
   if (includeStairs && projectType !== "stairs-only") extrasMultiplier += 0.15;
 
   if (projectType === "stairs-only") {
-    const totalMin = baseMin * sqft * extrasMultiplier; // here sqft = number of steps
+    const totalMin = baseMin * sqft * extrasMultiplier;
     const totalMax = baseMax * sqft * extrasMultiplier;
     return { min: totalMin, max: totalMax };
   }
@@ -94,23 +91,59 @@ export default function Home() {
   const [result, setResult] = useState<QuoteResult | null>(null);
   const [submitted, setSubmitted] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const isValidSqft =
+    sqft.trim() !== "" && !isNaN(parseFloat(sqft)) && parseFloat(sqft) > 0;
+
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    setSubmitted(true);
+
     const numSqft = parseFloat(sqft);
+    const parsedSqft = isNaN(numSqft) ? 0 : numSqft;
+
     const quote = calculateQuote(
       projectType,
-      isNaN(numSqft) ? 0 : numSqft,
+      parsedSqft,
       condition,
       includeBaseboards,
       includeFurniture,
       includeStairs
     );
-    setResult(quote);
-    setSubmitted(true);
-  };
 
-  const isValidSqft =
-    sqft.trim() !== "" && !isNaN(parseFloat(sqft)) && parseFloat(sqft) > 0;
+    setResult(quote);
+
+    // If sqft invalid, don't bother sending
+    if (!parsedSqft || parsedSqft <= 0) return;
+
+    // ---- Send to Wix via your API route ----
+    try {
+      const payload = {
+        projectType,
+        sqft: parsedSqft,
+        condition,
+        includeBaseboards,
+        includeFurniture,
+        includeStairs,
+        estimateMin: quote.min,
+        estimateMax: quote.max,
+        source: "calculator",
+      };
+
+      const res = await fetch("/api/wix-webhook", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(payload),
+      });
+
+      if (!res.ok) {
+        console.error("Failed to send to Wix");
+      }
+    } catch (err) {
+      console.error("Error calling Wix webhook", err);
+    }
+  };
 
   return (
     <main className="min-h-screen bg-neutral-950 text-neutral-100 flex items-center justify-center p-4">
@@ -179,7 +212,9 @@ export default function Home() {
                   step="any"
                   value={sqft}
                   onChange={(e) => setSqft(e.target.value)}
-                  placeholder={projectType === "stairs-only" ? "e.g. 14" : "e.g. 850"}
+                  placeholder={
+                    projectType === "stairs-only" ? "e.g. 14" : "e.g. 850"
+                  }
                   className="w-full rounded-lg border border-neutral-700 bg-neutral-950 px-3 py-2 text-sm text-neutral-50 outline-none ring-emerald-500/60 focus:border-emerald-400 focus:ring-1"
                 />
                 <p className="text-[11px] text-neutral-500">
@@ -268,9 +303,12 @@ export default function Home() {
             )}
 
             <p className="pt-1 text-[10px] leading-snug text-neutral-500">
-              This tool gives a **rough range** based on typical Los Angeles
-              projects. Final pricing depends on on-site inspection, design
-              decisions and written proposal.
+              This tool gives a{" "}
+              <span className="font-semibold text-neutral-300">
+                rough range
+              </span>{" "}
+              based on typical Los Angeles projects. Final pricing depends on
+              on-site inspection, design decisions and a written proposal.
             </p>
           </form>
 
@@ -304,9 +342,9 @@ export default function Home() {
                 </>
               ) : (
                 <p className="text-sm text-neutral-400">
-                  Start by telling us your square footage (or stair count),
-                  and we&apos;ll show you a realistic range most of our clients
-                  land in.
+                  Start by telling us your square footage (or stair count), and
+                  we&apos;ll show you a realistic range most of our clients land
+                  in.
                 </p>
               )}
 
@@ -323,7 +361,7 @@ export default function Home() {
                   after a site visit.
                 </p>
                 <a
-                  href="https://www.leonshardwood.com/quote" // or your GHL booking link
+                  href="https://www.leonshardwood.com/booking-calendar/flooring-consultation?referral=service_list_widget"
                   className="mt-2 inline-flex w-full items-center justify-center rounded-lg border border-neutral-700 bg-neutral-50/95 px-3 py-2 text-xs font-semibold text-neutral-950 transition hover:bg-white"
                 >
                   Share my estimate &amp; request a visit
@@ -336,8 +374,11 @@ export default function Home() {
                 Want to actually see it on your floors?
               </p>
               <p className="text-[11px] text-amber-100">
-                Use our experimental <span className="font-semibold">camera floor visualizer</span> to layer a few of our favorite
-                profiles over your real room and get a feel for tone, pattern and vibe before we ever bring samples out.
+                Use our experimental{" "}
+                <span className="font-semibold">camera floor visualizer</span>{" "}
+                to layer a few of our favorite profiles over your real room and
+                get a feel for tone, pattern and vibe before we ever bring
+                samples out.
               </p>
               <a
                 href="/camera"
@@ -346,8 +387,9 @@ export default function Home() {
                 Open camera visualizer (beta)
               </a>
               <p className="text-[10px] text-amber-200/80">
-                Works best on a recent iPhone or Android in good lighting. This is just a visual toy – we still confirm everything in
-                person with real samples.
+                Works best on a recent iPhone or Android in good lighting. This
+                is just a visual toy – we still confirm everything in person
+                with real samples.
               </p>
             </div>
           </div>
