@@ -72,7 +72,7 @@ export default function CameraVisualizerPage() {
   }
 
   try {
-    await fetch("/api/lead", {
+    await fetch("/api/wix-webhook", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
