@@ -169,7 +169,7 @@ export default function Home() {
         submittedAt: new Date().toISOString(),
       };
 
-      const res = await fetch("/api/wix-webhook", {
+      const res = await fetch("/api/lead", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
