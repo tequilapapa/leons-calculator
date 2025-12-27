@@ -1,6 +1,22 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
+import Script from "next/script";
+
+export default function RootLayout({ children }) {
+  return (
+    <html>
+      <body>
+        {children}
+        <Script
+          src="https://calendar.leonshardwood.com/js/external-tracking.js"
+          data-tracking-id="tk_923aa813821b43e88da369e0d8e0edd9"
+          strategy="afterInteractive"
+        />
+      </body>
+    </html>
+  );
+}
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
