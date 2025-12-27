@@ -2,7 +2,7 @@
 import { NextResponse } from "next/server";
 
 const GHL_WEBHOOK_URL =
-  "https://services.leadconnectorhq.com/hooks/xPGp97UEGHbh48A0Th2k/webhook-trigger/96242f67-a5cf-4e28-a881-2063830c5dc0";
+  "https://services.leadconnectorhq.com/hooks/xPGp97UEGHbh48A0Th2k/webhook-trigger/ba330fc8-fbd2-4df6-9a04-5a54a586c172";
 
 // Helper: convert FormData → plain object
 function formDataToObject(formData: FormData) {
