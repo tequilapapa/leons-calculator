@@ -92,7 +92,7 @@ interface ContactState {
 export default function Home() {
   const [step, setStep] = useState<Step>(1);
 
-  // existing calculator state
+  // calculator state
   const [projectType, setProjectType] = useState<ProjectType>("refinish");
   const [sqft, setSqft] = useState<string>("");
   const [condition, setCondition] = useState<Condition>("average");
@@ -107,7 +107,8 @@ export default function Home() {
     phone: "",
   });
   const [result, setResult] = useState<QuoteResult | null>(null);
-  const [submitted, setSubmitted] = useState(false);
+  const [submittedSqft, setSubmittedSqft] = useState(false);
+  const [submittedContact, setSubmittedContact] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const isValidSqft =
@@ -120,8 +121,8 @@ export default function Home() {
     setContact((prev) => ({ ...prev, [key]: value }));
   }
 
-  async function handleViewEstimate() {
-    setSubmitted(true);
+  function handleCalculateEstimate() {
+    setSubmittedSqft(true);
 
     const numSqft = parseFloat(sqft);
     const parsedSqft = isNaN(numSqft) ? 0 : numSqft;
@@ -140,30 +141,37 @@ export default function Home() {
       return;
     }
 
-    // go to results “page”
-    setStep(3);
+    // show results (no contact yet)
+    setStep(2);
 
-    // scroll into view on mobile
     setTimeout(() => {
       const el = document.getElementById("results-section");
       if (el) {
         el.scrollIntoView({ behavior: "smooth", block: "start" });
       }
     }, 80);
+  }
 
-    // send to Wix / GHL via your existing API route
+  async function handleSaveEstimate() {
+    setSubmittedContact(true);
+
+    if (!contact.name || (!contact.email && !contact.phone)) {
+      return;
+    }
+
     try {
       setIsSubmitting(true);
+      const parsedSqft = parseFloat(sqft);
       const payload = {
         type: "LEON_CALCULATOR_LEAD",
         projectType,
-        sqft: parsedSqft,
+        sqft: isNaN(parsedSqft) ? 0 : parsedSqft,
         condition,
         includeBaseboards,
         includeFurniture,
         includeStairs,
-        estimateMin: quote.min,
-        estimateMax: quote.max,
+        estimateMin: result?.min ?? null,
+        estimateMax: result?.max ?? null,
         contact,
         source: "calculator-funnel",
         submittedAt: new Date().toISOString(),
@@ -177,11 +185,34 @@ export default function Home() {
 
       if (!res.ok) {
         console.error("Failed to send to Wix");
+      } else {
+        // here you could redirect to a thank-you or booking page
+        // window.location.href = "https://www.leonshardwood.com/booking-calendar/...";
       }
     } catch (err) {
       console.error("Error calling Wix webhook", err);
     } finally {
       setIsSubmitting(false);
+    }
+  }
+
+  function handleOpenCamera() {
+    const parsedSqft = parseFloat(sqft);
+    const validSqft = !isNaN(parsedSqft) && parsedSqft > 0 ? parsedSqft : 0;
+
+    const installGroup =
+      projectType === "refinish" || projectType === "stairs-only"
+        ? "refinish"
+        : "new-install";
+
+    const params = new URLSearchParams({
+      projectType,
+      sqft: validSqft ? String(validSqft) : "",
+      installGroup,
+    });
+
+    if (typeof window !== "undefined") {
+      window.location.href = `/camera?${params.toString()}`;
     }
   }
 
@@ -195,12 +226,13 @@ export default function Home() {
               Leon&apos;s Hardwood • Smart Floor Estimator
             </h1>
             <p className="text-xs text-neutral-400">
-              Step-by-step ballpark, then a real visit when you&apos;re ready.
+              Step-by-step ballpark first, then design, visuals &amp; a real
+              visit.
             </p>
           </div>
           <span className="mt-2 inline-flex items-center gap-1 rounded-full border border-emerald-400/40 bg-emerald-500/10 px-3 py-1 text-xs font-medium text-emerald-200">
             <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
-            Beta • Ballpark only
+            Beta • Calculator + Visualizer
           </span>
         </div>
 
@@ -211,6 +243,7 @@ export default function Home() {
               Step {step} of 3
             </div>
 
+            {/* STEP 1 – PROJECT INFO */}
             {step === 1 && (
               <section className="space-y-4">
                 <h2 className="text-xl font-semibold">
@@ -347,14 +380,14 @@ export default function Home() {
 
                 <button
                   type="button"
-                  onClick={() => setStep(2)}
+                  onClick={handleCalculateEstimate}
                   disabled={!isValidSqft}
                   className="mt-2 inline-flex w-full items-center justify-center rounded-lg border border-emerald-500 bg-emerald-500 px-3 py-2 text-sm font-medium text-emerald-950 shadow-lg shadow-emerald-500/25 transition hover:bg-emerald-400 disabled:cursor-not-allowed disabled:border-neutral-700 disabled:bg-neutral-800 disabled:text-neutral-500 disabled:shadow-none"
                 >
-                  Next: where should we send your range?
+                  Calculate my ballpark
                 </button>
 
-                {!isValidSqft && submitted && (
+                {!isValidSqft && submittedSqft && (
                   <p className="text-[11px] text-red-400">
                     Please enter a valid square footage or stair count.
                   </p>
@@ -362,20 +395,84 @@ export default function Home() {
               </section>
             )}
 
+            {/* STEP 2 – SHOW ESTIMATE + BUTTONS */}
             {step === 2 && (
-              <section className="space-y-4">
+              <section className="space-y-4" id="results-section">
                 <h2 className="text-xl font-semibold">
-                  Where should we send your estimate?
+                  Your ballpark investment range
                 </h2>
                 <p className="text-xs text-neutral-400">
-                  We&apos;ll text and email your ballpark range so you don&apos;t
-                  lose it. No spam, no pressure.
+                  This is a rough range based on what you shared. Next, you can
+                  either save it to discuss your project or open the camera
+                  visualizer.
+                </p>
+
+                {result && result.min > 0 ? (
+                  <div className="rounded-xl border border-neutral-800 bg-gradient-to-br from-neutral-900 to-neutral-950 p-4">
+                    <p className="text-[11px] uppercase tracking-wide text-neutral-400">
+                      Estimated range
+                    </p>
+                    <p className="mt-1 text-2xl font-semibold text-emerald-300">
+                      {currency(result.min)} – {currency(result.max)}
+                    </p>
+                    <p className="mt-1 text-[11px] text-neutral-400">
+                      Based on{" "}
+                      <span className="font-medium text-neutral-200">
+                        {projectType === "stairs-only"
+                          ? `${sqft || "?"} stair steps`
+                          : `${sqft || "?"} sq ft`}
+                      </span>{" "}
+                      and the options you selected.
+                    </p>
+                  </div>
+                ) : (
+                  <p className="text-sm text-neutral-400">
+                    Something went off with the numbers. Go back a step and try
+                    again.
+                  </p>
+                )}
+
+                <div className="space-y-2">
+                  <button
+                    type="button"
+                    onClick={() => setStep(3)}
+                    className="w-full rounded-full bg-[#FFD44A] text-black text-sm font-semibold py-3"
+                  >
+                    Save this estimate &amp; talk about my project
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleOpenCamera}
+                    className="w-full rounded-full border border-neutral-700 text-xs sm:text-sm py-2"
+                  >
+                    See how my new floors could look (open camera tool)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setStep(1)}
+                    className="w-full rounded-full border border-neutral-800 text-[11px] py-2"
+                  >
+                    Back and tweak project details
+                  </button>
+                </div>
+              </section>
+            )}
+
+            {/* STEP 3 – CONTACT FORM (SEND TO WIX) */}
+            {step === 3 && (
+              <section className="space-y-4" id="contact-step">
+                <h2 className="text-xl font-semibold">
+                  Save this estimate &amp; let&apos;s talk floors
+                </h2>
+                <p className="text-xs text-neutral-400">
+                  We&apos;ll attach this ballpark to your name so we can pick up
+                  right where you left off — no repeating yourself.
                 </p>
 
                 <div className="space-y-3">
                   <div>
                     <label className="block text-xs mb-1 text-neutral-300">
-                      Full Name
+                      Full Name<span className="text-red-400">*</span>
                     </label>
                     <input
                       type="text"
@@ -417,89 +514,39 @@ export default function Home() {
                   </div>
                 </div>
 
+                {submittedContact &&
+                  (!contact.name || (!contact.email && !contact.phone)) && (
+                    <p className="text-[11px] text-red-400">
+                      Please add your name and at least an email or phone so we
+                      can actually reach you.
+                    </p>
+                  )}
+
                 <div className="flex gap-3 mt-4">
                   <button
                     type="button"
-                    onClick={() => setStep(1)}
+                    onClick={() => setStep(2)}
                     className="w-1/3 rounded-full border border-neutral-700 text-xs sm:text-sm py-2"
                   >
                     Back
                   </button>
                   <button
                     type="button"
-                    onClick={handleViewEstimate}
+                    onClick={handleSaveEstimate}
                     disabled={isSubmitting}
                     className="w-2/3 rounded-full bg-[#FFD44A] text-black text-xs sm:text-sm font-semibold py-2.5 disabled:opacity-60"
                   >
                     {isSubmitting
-                      ? "Calculating..."
-                      : "View my ballpark price range"}
+                      ? "Saving..."
+                      : "Save estimate & share my project"}
                   </button>
                 </div>
 
                 <p className="pt-1 text-[10px] leading-snug text-neutral-500">
-                  This tool gives a rough range based on typical Los Angeles
-                  projects. Final pricing depends on on-site inspection, design
-                  decisions and a written proposal.
+                  This doesn&apos;t lock you into anything. It just gives us
+                  context so your first call or visit is focused on design,
+                  timing and options — not re-answering the same questions.
                 </p>
-              </section>
-            )}
-
-            {step === 3 && (
-              <section className="space-y-4" id="results-section">
-                <h2 className="text-xl font-semibold">
-                  Your ballpark investment range
-                </h2>
-                <p className="text-xs text-neutral-400">
-                  This is a rough range based on what you shared. A quick
-                  in-person look lets us tighten these numbers and spot savings
-                  or hidden repairs.
-                </p>
-
-                {result && result.min > 0 ? (
-                  <div className="rounded-xl border border-neutral-800 bg-gradient-to-br from-neutral-900 to-neutral-950 p-4">
-                    <p className="text-[11px] uppercase tracking-wide text-neutral-400">
-                      Estimated range
-                    </p>
-                    <p className="mt-1 text-2xl font-semibold text-emerald-300">
-                      {currency(result.min)} – {currency(result.max)}
-                    </p>
-                    <p className="mt-1 text-[11px] text-neutral-400">
-                      Based on{" "}
-                      <span className="font-medium text-neutral-200">
-                        {projectType === "stairs-only"
-                          ? `${sqft || "?"} stair steps`
-                          : `${sqft || "?"} sq ft`}
-                      </span>{" "}
-                      and the options you selected.
-                    </p>
-                  </div>
-                ) : (
-                  <p className="text-sm text-neutral-400">
-                    Something went off with the numbers. Go back a step and try
-                    again.
-                  </p>
-                )}
-
-                <button
-                  type="button"
-                  onClick={() =>
-                    (window.location.href =
-                      // 👉 change this URL to GoHighLevel calendar when you’re ready
-                      "https://www.leonshardwood.com/schedule")
-                  }
-                  className="w-full rounded-full bg-white text-black text-sm font-semibold py-3 mb-3"
-                >
-                  Book a flooring consultation
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setStep(1)}
-                  className="w-full rounded-full border border-neutral-700 text-xs sm:text-sm py-2"
-                >
-                  Start over / tweak answers
-                </button>
               </section>
             )}
           </div>
@@ -507,31 +554,26 @@ export default function Home() {
           {/* RIGHT SIDE: PITCH / VISUALIZER CTA */}
           <div className="border-t border-neutral-800 bg-neutral-950/60 px-6 py-5 md:border-l md:border-t-0 md:py-6">
             <h2 className="text-sm font-semibold text-neutral-100">
-              What happens next?
+              What happens with this info?
             </h2>
             <p className="mt-1 text-xs text-neutral-400">
-              We use this range as a starting point, then dial it in with a site
-              visit, design choices and a written proposal.
+              We use your ballpark and notes as a starting point, then dial it
+              in with a site visit, samples and a written proposal. No spam, no
+              pressure.
             </p>
 
             <div className="mt-4 rounded-lg border border-amber-500/40 bg-amber-500/5 p-3 space-y-2">
               <p className="text-[11px] font-semibold uppercase tracking-wide text-amber-300">
-                Want to see it on your floors?
+                Visual person?
               </p>
               <p className="text-[11px] text-amber-100">
                 Use our experimental{" "}
                 <span className="font-semibold">camera floor visualizer</span>{" "}
-                to layer a few profiles over your real room and feel the tone
-                before we bring samples.
+                (from the previous step) to layer a few profiles over your real
+                room and feel the tone before we bring samples.
               </p>
-              <a
-                href="/camera"
-                className="inline-flex w-full items-center justify-center rounded-lg border border-amber-400/60 bg-amber-300/90 px-3 py-2 text-[11px] font-semibold text-amber-950 transition hover:bg-amber-200"
-              >
-                Open camera visualizer (beta)
-              </a>
               <p className="text-[10px] text-amber-200/80">
-                Works best on a recent iPhone or Android in good lighting. Just
+                Works best on a recent iPhone or Android in good lighting. It’s
                 a visual toy — we still confirm everything in person.
               </p>
             </div>
