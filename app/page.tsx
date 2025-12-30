@@ -1,585 +1,708 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 
-type ProjectType =
-  | "refinish"
-  | "new-hardwood"
-  | "luxury-vinyl"
-  | "engineered"
-  | "stairs-only";
+const PROJECT_TYPES = [
+  {
+    id: "refinish",
+    label: "Refinishing existing hardwood",
+    description: "Keep your current wood, upgrade the look.",
+  },
+  {
+    id: "new-hardwood",
+    label: "New hardwood installation",
+    description: "Fresh install — new layout, new vibe.",
+  },
+  {
+    id: "lvp",
+    label: "Luxury vinyl / waterproof options",
+    description: "Budget-friendly, durable, kid- and dog-proof.",
+  },
+  {
+    id: "kitchen-remodel",
+    label: "Kitchen or full remodel",
+    description: "Floors + cabinets + layout — full transformation.",
+  },
+];
 
-type Condition = "light" | "average" | "heavy";
+const TIMELINES = [
+  { id: "asap", label: "ASAP", caption: "Something urgent going on." },
+  {
+    id: "2-4-weeks",
+    label: "Within 2–4 weeks",
+    caption: "Perfect for most projects.",
+  },
+  {
+    id: "1-2-months",
+    label: "Within 1–2 months",
+    caption: "Plenty of time to plan.",
+  },
+  {
+    id: "2-plus-months",
+    label: "2+ months out",
+    caption: "No rush, just exploring options.",
+  },
+];
 
-interface QuoteResult {
-  min: number;
-  max: number;
-}
+const APPOINTMENT_TYPES = [
+  { id: "info-call", label: "Just an informational call" },
+  { id: "virtual", label: "Virtual consult" },
+  { id: "in-person", label: "On-site visit / measurement" },
+  { id: "undecided", label: "Not sure yet, just exploring" },
+];
 
-const currency = (value: number) =>
-  value.toLocaleString("en-US", {
-    style: "currency",
-    currency: "USD",
-    maximumFractionDigits: 0,
-  });
+function getPriceRange({ projectType, sqft }: { projectType: string; sqft: string }) {
+  const area = Number(sqft);
+  if (!projectType || !area || Number.isNaN(area)) return null;
 
-function calculateQuote(
-  projectType: ProjectType,
-  sqft: number,
-  condition: Condition,
-  includeBaseboards: boolean,
-  includeFurniture: boolean,
-  includeStairs: boolean
-): QuoteResult {
-  if (!sqft || sqft <= 0) {
-    return { min: 0, max: 0 };
-  }
-
-  let baseMin = 0;
-  let baseMax = 0;
+  let lowPer = 8;
+  let highPer = 18;
 
   switch (projectType) {
     case "refinish":
-      baseMin = 5;
-      baseMax = 9;
+      lowPer = 4;
+      highPer = 9;
       break;
     case "new-hardwood":
-      baseMin = 9;
-      baseMax = 16;
+      lowPer = 9;
+      highPer = 20;
       break;
-    case "luxury-vinyl":
-      baseMin = 5;
-      baseMax = 9;
+    case "lvp":
+      lowPer = 5;
+      highPer = 12;
       break;
-    case "engineered":
-      baseMin = 7;
-      baseMax = 12;
+    case "kitchen-remodel":
+      lowPer = 18;
+      highPer = 35;
       break;
-    case "stairs-only":
-      baseMin = 80; // per step
-      baseMax = 150;
+    default:
       break;
   }
 
-  let conditionBump = 1;
-  if (condition === "average") conditionBump = 1.1;
-  if (condition === "heavy") conditionBump = 1.25;
-
-  let extrasMultiplier = 1;
-  if (includeBaseboards) extrasMultiplier += 0.1;
-  if (includeFurniture) extrasMultiplier += 0.1;
-  if (includeStairs && projectType !== "stairs-only") extrasMultiplier += 0.15;
-
-  if (projectType === "stairs-only") {
-    const totalMin = baseMin * sqft * extrasMultiplier;
-    const totalMax = baseMax * sqft * extrasMultiplier;
-    return { min: totalMin, max: totalMax };
-  }
-
-  const totalMin = sqft * baseMin * conditionBump * extrasMultiplier;
-  const totalMax = sqft * baseMax * conditionBump * extrasMultiplier;
-  return { min: totalMin, max: totalMax };
+  return {
+    low: Math.round(area * lowPer),
+    high: Math.round(area * highPer),
+  };
 }
 
-type Step = 1 | 2 | 3;
+interface FormState {
+  projectType: string;
+  sqft: string;
+  timeline: string;
+}
 
 interface ContactState {
   name: string;
   email: string;
   phone: string;
+  zip: string;
+  appointmentType: string;
+  preferredDate: string;
+  preferredTime: string;
+  notes: string;
 }
 
-export default function Home() {
-  const [step, setStep] = useState<Step>(1);
+export default function CalculatorPage() {
+  const [step, setStep] = useState(1);
+  const [form, setForm] = useState<FormState>({
+    projectType: "",
+    sqft: "",
+    timeline: "",
+  });
 
-  // calculator state
-  const [projectType, setProjectType] = useState<ProjectType>("refinish");
-  const [sqft, setSqft] = useState<string>("");
-  const [condition, setCondition] = useState<Condition>("average");
-  const [includeBaseboards, setIncludeBaseboards] = useState(false);
-  const [includeFurniture, setIncludeFurniture] = useState(false);
-  const [includeStairs, setIncludeStairs] = useState(false);
-
-  // contact + result
   const [contact, setContact] = useState<ContactState>({
     name: "",
     email: "",
     phone: "",
+    zip: "",
+    appointmentType: "",
+    preferredDate: "",
+    preferredTime: "",
+    notes: "",
   });
-  const [result, setResult] = useState<QuoteResult | null>(null);
-  const [submittedSqft, setSubmittedSqft] = useState(false);
-  const [submittedContact, setSubmittedContact] = useState(false);
-  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const isValidSqft =
-    sqft.trim() !== "" && !isNaN(parseFloat(sqft)) && parseFloat(sqft) > 0;
+  const [submitting, setSubmitting] = useState(false);
+  const [submitted, setSubmitted] = useState<null | "ok" | "error">(null);
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
-  function handleContactChange<K extends keyof ContactState>(
-    key: K,
-    value: ContactState[K]
-  ) {
-    setContact((prev) => ({ ...prev, [key]: value }));
+  const totalSteps = 4;
+
+  const priceRange = useMemo(
+    () => getPriceRange({ projectType: form.projectType, sqft: form.sqft }),
+    [form.projectType, form.sqft]
+  );
+
+  const canNext =
+    (step === 1 && !!form.projectType) ||
+    (step === 2 && !!form.sqft) ||
+    (step === 3 && !!form.timeline) ||
+    step === 4;
+
+  function next() {
+    if (step < totalSteps && canNext) setStep(step + 1);
   }
 
-  function handleCalculateEstimate() {
-    setSubmittedSqft(true);
-
-    const numSqft = parseFloat(sqft);
-    const parsedSqft = isNaN(numSqft) ? 0 : numSqft;
-
-    const quote = calculateQuote(
-      projectType,
-      parsedSqft,
-      condition,
-      includeBaseboards,
-      includeFurniture,
-      includeStairs
-    );
-    setResult(quote);
-
-    if (!parsedSqft || parsedSqft <= 0) {
-      return;
-    }
-
-    // show results (no contact yet)
-    setStep(2);
-
-    setTimeout(() => {
-      const el = document.getElementById("results-section");
-      if (el) {
-        el.scrollIntoView({ behavior: "smooth", block: "start" });
-      }
-    }, 80);
+  function back() {
+    if (step > 1) setStep(step - 1);
   }
 
-  async function handleSaveEstimate() {
-    setSubmittedContact(true);
+  function updateField(field: keyof FormState, value: string) {
+    setForm((prev) => ({ ...prev, [field]: value }));
+  }
 
-    if (!contact.name || (!contact.email && !contact.phone)) {
-      return;
-    }
+  function updateContact(field: keyof ContactState, value: string) {
+    setContact((prev) => ({ ...prev, [field]: value }));
+  }
+
+  const canSubmit =
+    !!priceRange &&
+    !!contact.name &&
+    (!!contact.phone || !!contact.email) &&
+    !!contact.appointmentType;
+
+  async function handleSubmit() {
+    if (!priceRange) return;
+
+    setSubmitting(true);
+    setSubmitted(null);
+    setSubmitError(null);
 
     try {
-      setIsSubmitting(true);
-      const parsedSqft = parseFloat(sqft);
-      const payload = {
-        type: "LEON_CALCULATOR_LEAD",
-        projectType,
-        sqft: isNaN(parsedSqft) ? 0 : parsedSqft,
-        condition,
-        includeBaseboards,
-        includeFurniture,
-        includeStairs,
-        estimateMin: result?.min ?? null,
-        estimateMax: result?.max ?? null,
-        contact,
-        source: "calculator-funnel",
-        submittedAt: new Date().toISOString(),
-      };
-
-      const res = await fetch("/api/wix-webhook", {
+      const res = await fetch("/api/leads", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          projectType: form.projectType,
+          size: Number(form.sqft),
+          extras: {
+            timeline: form.timeline,
+            appointmentType: contact.appointmentType,
+            preferredDate: contact.preferredDate || null,
+            preferredTime: contact.preferredTime || null,
+            notes: contact.notes || null,
+          },
+          zip: contact.zip || null,
+          estimateRange: priceRange,
+          contact: {
+            name: contact.name,
+            email: contact.email || null,
+            phone: contact.phone || null,
+          },
+          meta: {
+            source: "leons-calculator",
+            createdAt: new Date().toISOString(),
+            // You can add more meta later (utm, pageUrl, etc.)
+          },
+        }),
       });
 
-      if (!res.ok) {
-        console.error("Failed to send to Wix");
-      } else {
-        // here you could redirect to a thank-you or booking page
-        // window.location.href = "https://www.leonshardwood.com/booking-calendar/...";
+      const data = await res.json();
+
+      if (!res.ok || !data.ok) {
+        throw new Error(data.error || "Submission failed");
       }
-    } catch (err) {
-      console.error("Error calling Wix webhook", err);
+
+      setSubmitted("ok");
+    } catch (err: any) {
+      console.error("Lead submit error:", err);
+      setSubmitError(err?.message || "Something went wrong submitting your details.");
+      setSubmitted("error");
     } finally {
-      setIsSubmitting(false);
-    }
-  }
-
-  function handleOpenCamera() {
-    const parsedSqft = parseFloat(sqft);
-    const validSqft = !isNaN(parsedSqft) && parsedSqft > 0 ? parsedSqft : 0;
-
-    const installGroup =
-      projectType === "refinish" || projectType === "stairs-only"
-        ? "refinish"
-        : "new-install";
-
-    const params = new URLSearchParams({
-      projectType,
-      sqft: validSqft ? String(validSqft) : "",
-      installGroup,
-    });
-
-    if (typeof window !== "undefined") {
-      window.location.href = `/camera?${params.toString()}`;
+      setSubmitting(false);
     }
   }
 
   return (
-    <main className="min-h-screen bg-neutral-950 text-neutral-100 flex items-center justify-center p-4">
-      <div className="w-full max-w-4xl rounded-2xl border border-neutral-800 bg-neutral-900/80 shadow-xl shadow-black/40 backdrop-blur">
-        {/* Header */}
-        <div className="border-b border-neutral-800 px-6 py-4 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <h1 className="text-lg font-semibold tracking-wide">
-              Leon&apos;s Hardwood • Smart Floor Estimator
-            </h1>
-            <p className="text-xs text-neutral-400">
-              Step-by-step ballpark first, then design, visuals &amp; a real
-              visit.
-            </p>
+    <main className="min-h-screen flex flex-col items-center px-4 py-10">
+      {/* Header */}
+      <section className="w-full max-w-3xl text-center mb-8">
+        <h1 className="text-3xl md:text-4xl font-semibold tracking-tight mb-4">
+          Leon&apos;s Project Calculator
+        </h1>
+        <p className="text-sm md:text-base text-slate-300 max-w-xl mx-auto">
+          Get a transparent, no-pressure price range for your flooring or
+          kitchen project in just a few steps. No fake suspense, no spam — just
+          real numbers and clear options.
+        </p>
+      </section>
+
+      {/* Card */}
+      <section className="w-full max-w-3xl bg-slate-900/70 border border-slate-800 rounded-2xl p-6 md:p-8 shadow-xl">
+        {/* Progress */}
+        <div className="flex items-center justify-between mb-4">
+          <p className="text-xs uppercase tracking-[0.2em] text-slate-400">
+            Step {step}
+          </p>
+          <div className="flex-1 ml-4 h-1 rounded-full bg-slate-800 overflow-hidden">
+            <div
+              className="h-full bg-emerald-400 transition-all"
+              style={{ width: `${(step / totalSteps) * 100}%` }}
+            />
           </div>
-          <span className="mt-2 inline-flex items-center gap-1 rounded-full border border-emerald-400/40 bg-emerald-500/10 px-3 py-1 text-xs font-medium text-emerald-200">
-            <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
-            Beta • Calculator + Visualizer
-          </span>
         </div>
 
-        <div className="grid gap-0 border-neutral-800 md:grid-cols-[3fr,2fr] md:divide-x md:divide-neutral-800">
-          {/* LEFT SIDE: STEP CONTENT */}
-          <div className="px-6 py-5 md:py-6 space-y-4">
-            <div className="text-[11px] uppercase tracking-[0.2em] text-neutral-500">
-              Step {step} of 3
-            </div>
+        {/* Step content */}
+        {step === 1 && (
+          <StepProjectType
+            value={form.projectType}
+            onChange={(v) => updateField("projectType", v)}
+          />
+        )}
 
-            {/* STEP 1 – PROJECT INFO */}
-            {step === 1 && (
-              <section className="space-y-4">
-                <h2 className="text-xl font-semibold">
-                  Let&apos;s get a feel for your project
-                </h2>
-                <p className="text-xs text-neutral-400">
-                  Answer a few quick questions so we can calculate a realistic
-                  investment range.
-                </p>
+        {step === 2 && (
+          <StepSqft
+            projectType={form.projectType}
+            value={form.sqft}
+            onChange={(v) => updateField("sqft", v)}
+          />
+        )}
 
-                {/* Project type */}
-                <div className="space-y-1">
-                  <label className="text-xs font-medium uppercase tracking-wide text-neutral-400">
-                    Project type
-                  </label>
-                  <div className="grid grid-cols-2 gap-2 text-xs sm:grid-cols-3">
-                    {[
-                      { id: "refinish", label: "Refinishing" },
-                      { id: "new-hardwood", label: "New Hardwood" },
-                      { id: "luxury-vinyl", label: "Luxury Vinyl" },
-                      { id: "engineered", label: "Engineered / Prefinished" },
-                      { id: "stairs-only", label: "Stairs Only" },
-                    ].map((option) => (
-                      <button
-                        key={option.id}
-                        type="button"
-                        onClick={() =>
-                          setProjectType(option.id as ProjectType)
-                        }
-                        className={`rounded-lg border px-2.5 py-2 text-left transition ${
-                          projectType === option.id
-                            ? "border-emerald-400 bg-emerald-500/10 text-emerald-100"
-                            : "border-neutral-700 bg-neutral-900/60 text-neutral-300 hover:border-neutral-500"
-                        }`}
-                      >
-                        {option.label}
-                      </button>
-                    ))}
-                  </div>
-                </div>
+        {step === 3 && (
+          <StepTimeline
+            value={form.timeline}
+            onChange={(v) => updateField("timeline", v)}
+          />
+        )}
 
-                {/* sqft + condition */}
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <div className="space-y-1">
-                    <label className="text-xs font-medium uppercase tracking-wide text-neutral-400">
-                      {projectType === "stairs-only"
-                        ? "Number of stair steps"
-                        : "Approximate square footage"}
-                    </label>
-                    <input
-                      type="number"
-                      min={0}
-                      step="any"
-                      value={sqft}
-                      onChange={(e) => setSqft(e.target.value)}
-                      placeholder={
-                        projectType === "stairs-only" ? "e.g. 14" : "e.g. 850"
-                      }
-                      className="w-full rounded-lg border border-neutral-700 bg-neutral-950 px-3 py-2 text-sm text-neutral-50 outline-none ring-emerald-500/60 focus:border-emerald-400 focus:ring-1"
-                    />
-                    <p className="text-[11px] text-neutral-500">
-                      Ballpark is fine — we’ll measure precisely on site.
-                    </p>
-                  </div>
+        {step === 4 && (
+          <StepSummary
+            form={form}
+            priceRange={priceRange}
+            contact={contact}
+            onContactChange={updateContact}
+            onSubmit={handleSubmit}
+            canSubmit={canSubmit}
+            submitting={submitting}
+            submitted={submitted}
+            submitError={submitError}
+          />
+        )}
 
-                  <div className="space-y-1">
-                    <label className="text-xs font-medium uppercase tracking-wide text-neutral-400">
-                      Existing floor condition
-                    </label>
-                    <select
-                      value={condition}
-                      onChange={(e) =>
-                        setCondition(e.target.value as Condition)
-                      }
-                      className="w-full rounded-lg border border-neutral-700 bg-neutral-950 px-3 py-2 text-sm text-neutral-50 outline-none ring-emerald-500/60 focus:border-emerald-400 focus:ring-1"
-                    >
-                      <option value="light">
-                        Light wear (mostly cosmetic)
-                      </option>
-                      <option value="average">
-                        Average (scratches, light fading)
-                      </option>
-                      <option value="heavy">
-                        Heavy (sun damage, water marks, repairs)
-                      </option>
-                    </select>
-                    <p className="text-[11px] text-neutral-500">
-                      This just helps widen or tighten the range.
-                    </p>
-                  </div>
-                </div>
+        {/* Nav buttons */}
+        <div className="mt-8 flex items-center justify-between gap-4">
+          <button
+            onClick={back}
+            disabled={step === 1}
+            className="text-xs md:text-sm rounded-xl border border-slate-700 px-4 py-2 text-slate-200 disabled:opacity-40 disabled:cursor-default hover:border-slate-500 transition"
+          >
+            ← Back
+          </button>
 
-                {/* Extras */}
-                <div className="space-y-1">
-                  <span className="text-xs font-medium uppercase tracking-wide text-neutral-400">
-                    Extras you&apos;d like us to handle
-                  </span>
-                  <div className="grid gap-2 text-xs sm:grid-cols-3">
-                    <label className="flex cursor-pointer items-center gap-2 rounded-lg border border-neutral-700 bg-neutral-950 px-2.5 py-2 hover:border-neutral-500">
-                      <input
-                        type="checkbox"
-                        checked={includeBaseboards}
-                        onChange={(e) =>
-                          setIncludeBaseboards(e.target.checked)
-                        }
-                        className="h-3.5 w-3.5 rounded border-neutral-600 bg-neutral-900 text-emerald-500"
-                      />
-                      New baseboards / shoe
-                    </label>
-                    <label className="flex cursor-pointer items-center gap-2 rounded-lg border border-neutral-700 bg-neutral-950 px-2.5 py-2 hover:border-neutral-500">
-                      <input
-                        type="checkbox"
-                        checked={includeFurniture}
-                        onChange={(e) =>
-                          setIncludeFurniture(e.target.checked)
-                        }
-                        className="h-3.5 w-3.5 rounded border-neutral-600 bg-neutral-900 text-emerald-500"
-                      />
-                      Furniture move-out / back
-                    </label>
-                    <label className="flex cursor-pointer items-center gap-2 rounded-lg border border-neutral-700 bg-neutral-950 px-2.5 py-2 hover:border-neutral-500">
-                      <input
-                        type="checkbox"
-                        checked={includeStairs}
-                        onChange={(e) =>
-                          setIncludeStairs(e.target.checked)
-                        }
-                        className="h-3.5 w-3.5 rounded border-neutral-600 bg-neutral-900 text-emerald-500"
-                      />
-                      Include stairs in this scope
-                    </label>
-                  </div>
-                </div>
-
-                <button
-                  type="button"
-                  onClick={handleCalculateEstimate}
-                  disabled={!isValidSqft}
-                  className="mt-2 inline-flex w-full items-center justify-center rounded-lg border border-emerald-500 bg-emerald-500 px-3 py-2 text-sm font-medium text-emerald-950 shadow-lg shadow-emerald-500/25 transition hover:bg-emerald-400 disabled:cursor-not-allowed disabled:border-neutral-700 disabled:bg-neutral-800 disabled:text-neutral-500 disabled:shadow-none"
-                >
-                  Calculate my ballpark
-                </button>
-
-                {!isValidSqft && submittedSqft && (
-                  <p className="text-[11px] text-red-400">
-                    Please enter a valid square footage or stair count.
-                  </p>
-                )}
-              </section>
-            )}
-
-            {/* STEP 2 – SHOW ESTIMATE + BUTTONS */}
-            {step === 2 && (
-              <section className="space-y-4" id="results-section">
-                <h2 className="text-xl font-semibold">
-                  Your ballpark investment range
-                </h2>
-                <p className="text-xs text-neutral-400">
-                  This is a rough range based on what you shared. Next, you can
-                  either save it to discuss your project or open the camera
-                  visualizer.
-                </p>
-
-                {result && result.min > 0 ? (
-                  <div className="rounded-xl border border-neutral-800 bg-gradient-to-br from-neutral-900 to-neutral-950 p-4">
-                    <p className="text-[11px] uppercase tracking-wide text-neutral-400">
-                      Estimated range
-                    </p>
-                    <p className="mt-1 text-2xl font-semibold text-emerald-300">
-                      {currency(result.min)} – {currency(result.max)}
-                    </p>
-                    <p className="mt-1 text-[11px] text-neutral-400">
-                      Based on{" "}
-                      <span className="font-medium text-neutral-200">
-                        {projectType === "stairs-only"
-                          ? `${sqft || "?"} stair steps`
-                          : `${sqft || "?"} sq ft`}
-                      </span>{" "}
-                      and the options you selected.
-                    </p>
-                  </div>
-                ) : (
-                  <p className="text-sm text-neutral-400">
-                    Something went off with the numbers. Go back a step and try
-                    again.
-                  </p>
-                )}
-
-                <div className="space-y-2">
-                  <button
-                    type="button"
-                    onClick={() => setStep(3)}
-                    className="w-full rounded-full bg-[#FFD44A] text-black text-sm font-semibold py-3"
-                  >
-                    Save this estimate &amp; talk about my project
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleOpenCamera}
-                    className="w-full rounded-full border border-neutral-700 text-xs sm:text-sm py-2"
-                  >
-                    See how my new floors could look (open camera tool)
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setStep(1)}
-                    className="w-full rounded-full border border-neutral-800 text-[11px] py-2"
-                  >
-                    Back and tweak project details
-                  </button>
-                </div>
-              </section>
-            )}
-
-            {/* STEP 3 – CONTACT FORM (SEND TO WIX) */}
-            {step === 3 && (
-              <section className="space-y-4" id="contact-step">
-                <h2 className="text-xl font-semibold">
-                  Save this estimate &amp; let&apos;s talk floors
-                </h2>
-                <p className="text-xs text-neutral-400">
-                  We&apos;ll attach this ballpark to your name so we can pick up
-                  right where you left off — no repeating yourself.
-                </p>
-
-                <div className="space-y-3">
-                  <div>
-                    <label className="block text-xs mb-1 text-neutral-300">
-                      Full Name<span className="text-red-400">*</span>
-                    </label>
-                    <input
-                      type="text"
-                      value={contact.name}
-                      onChange={(e) =>
-                        handleContactChange("name", e.target.value)
-                      }
-                      placeholder="First & last name"
-                      className="w-full rounded-lg border border-neutral-700 bg-neutral-950 px-3 py-2 text-sm outline-none focus:border-emerald-400 focus:ring-1 ring-emerald-500/60"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs mb-1 text-neutral-300">
-                      Email
-                    </label>
-                    <input
-                      type="email"
-                      value={contact.email}
-                      onChange={(e) =>
-                        handleContactChange("email", e.target.value)
-                      }
-                      placeholder="you@example.com"
-                      className="w-full rounded-lg border border-neutral-700 bg-neutral-950 px-3 py-2 text-sm outline-none focus:border-emerald-400 focus:ring-1 ring-emerald-500/60"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs mb-1 text-neutral-300">
-                      Phone
-                    </label>
-                    <input
-                      type="tel"
-                      value={contact.phone}
-                      onChange={(e) =>
-                        handleContactChange("phone", e.target.value)
-                      }
-                      placeholder="(###) ###-####"
-                      className="w-full rounded-lg border border-neutral-700 bg-neutral-950 px-3 py-2 text-sm outline-none focus:border-emerald-400 focus:ring-1 ring-emerald-500/60"
-                    />
-                  </div>
-                </div>
-
-                {submittedContact &&
-                  (!contact.name || (!contact.email && !contact.phone)) && (
-                    <p className="text-[11px] text-red-400">
-                      Please add your name and at least an email or phone so we
-                      can actually reach you.
-                    </p>
-                  )}
-
-                <div className="flex gap-3 mt-4">
-                  <button
-                    type="button"
-                    onClick={() => setStep(2)}
-                    className="w-1/3 rounded-full border border-neutral-700 text-xs sm:text-sm py-2"
-                  >
-                    Back
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleSaveEstimate}
-                    disabled={isSubmitting}
-                    className="w-2/3 rounded-full bg-[#FFD44A] text-black text-xs sm:text-sm font-semibold py-2.5 disabled:opacity-60"
-                  >
-                    {isSubmitting
-                      ? "Saving..."
-                      : "Save estimate & share my project"}
-                  </button>
-                </div>
-
-                <p className="pt-1 text-[10px] leading-snug text-neutral-500">
-                  This doesn&apos;t lock you into anything. It just gives us
-                  context so your first call or visit is focused on design,
-                  timing and options — not re-answering the same questions.
-                </p>
-              </section>
+          <div className="flex items-center gap-3">
+            {step < totalSteps && (
+              <button
+                onClick={next}
+                disabled={!canNext}
+                className="text-xs md:text-sm rounded-xl bg-emerald-500 px-5 py-2 font-medium text-slate-950 disabled:bg-slate-700 disabled:text-slate-400 disabled:cursor-not-allowed hover:bg-emerald-400 transition"
+              >
+                Next
+              </button>
             )}
           </div>
+        </div>
 
-          {/* RIGHT SIDE: PITCH / VISUALIZER CTA */}
-          <div className="border-t border-neutral-800 bg-neutral-950/60 px-6 py-5 md:border-l md:border-t-0 md:py-6">
-            <h2 className="text-sm font-semibold text-neutral-100">
-              What happens with this info?
-            </h2>
-            <p className="mt-1 text-xs text-neutral-400">
-              We use your ballpark and notes as a starting point, then dial it
-              in with a site visit, samples and a written proposal. No spam, no
-              pressure.
+        <p className="text-[11px] text-slate-500 mt-4">
+          This calculator is for ballpark ranges only. Final pricing is always
+          verified on site so there are no surprises — ever.
+        </p>
+      </section>
+    </main>
+  );
+}
+
+function StepProjectType({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+}) {
+  return (
+    <>
+      <h2 className="text-xl md:text-2xl font-semibold mb-3">
+        What kind of project are you working on?
+      </h2>
+      <p className="text-sm text-slate-300 mb-6">
+        We&apos;ll use your answer to shape realistic price ranges and explain
+        what&apos;s involved — so you understand the &quot;why&quot; behind the
+        numbers.
+      </p>
+
+      <div className="grid gap-3 md:grid-cols-2">
+        {PROJECT_TYPES.map((option) => {
+          const active = value === option.id;
+          return (
+            <button
+              key={option.id}
+              type="button"
+              onClick={() => onChange(option.id)}
+              className={`w-full rounded-xl border px-4 py-3 text-left text-sm transition ${
+                active
+                  ? "border-emerald-400 bg-slate-900/90"
+                  : "border-slate-700 bg-slate-900 hover:border-emerald-400 hover:bg-slate-900/80"
+              }`}
+            >
+              <span className="block font-medium">{option.label}</span>
+              <span className="block text-xs text-slate-400">
+                {option.description}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+    </>
+  );
+}
+
+function StepSqft({
+  projectType,
+  value,
+  onChange,
+}: {
+  projectType: string;
+  value: string;
+  onChange: (v: string) => void;
+}) {
+  const project =
+    PROJECT_TYPES.find((p) => p.id === projectType)?.label || "your project";
+
+  return (
+    <>
+      <h2 className="text-xl md:text-2xl font-semibold mb-3">
+        About how many square feet are we working with?
+      </h2>
+      <p className="text-sm text-slate-300 mb-6">
+        It doesn&apos;t have to be perfect — a good guess lets us build a
+        realistic range for {project}. You can use your listing, plans, or just
+        rough room sizes.
+      </p>
+
+      <div className="space-y-4">
+        <div>
+          <label className="block text-xs uppercase tracking-[0.2em] text-slate-400 mb-2">
+            APPROXIMATE SQUARE FOOTAGE
+          </label>
+          <div className="flex items-center gap-3">
+            <input
+              type="number"
+              min="100"
+              step="10"
+              value={value}
+              onChange={(e) => onChange(e.target.value)}
+              placeholder="e.g. 800, 1200, 2500…"
+              className="flex-1 rounded-xl border border-slate-700 bg-slate-900 px-4 py-3 text-sm text-slate-100 placeholder:text-slate-500 focus:outline-none focus:border-emerald-400"
+            />
+            <span className="text-xs text-slate-400 whitespace-nowrap">
+              sq ft
+            </span>
+          </div>
+        </div>
+
+        <p className="text-xs text-slate-400">
+          Not sure? Start with your best guess — your estimator will verify
+          measurements on site before anything is final.
+        </p>
+      </div>
+    </>
+  );
+}
+
+function StepTimeline({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+}) {
+  return (
+    <>
+      <h2 className="text-xl md:text-2xl font-semibold mb-3">
+        When do you want this done?
+      </h2>
+      <p className="text-sm text-slate-300 mb-6">
+        Whatever your timing, we&apos;ll work with you to build a plan that
+        makes sense. Faster timelines are possible — they just book up first.
+      </p>
+
+      <div className="grid gap-3 md:grid-cols-2">
+        {TIMELINES.map((option) => {
+          const active = value === option.id;
+          return (
+            <button
+              key={option.id}
+              type="button"
+              onClick={() => onChange(option.id)}
+              className={`w-full rounded-xl border px-4 py-3 text-left text-sm transition ${
+                active
+                  ? "border-emerald-400 bg-slate-900/90"
+                  : "border-slate-700 bg-slate-900 hover:border-emerald-400 hover:bg-slate-900/80"
+              }`}
+            >
+              <span className="block font-medium">{option.label}</span>
+              <span className="block text-xs text-slate-400">
+                {option.caption}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+    </>
+  );
+}
+
+function StepSummary({
+  form,
+  priceRange,
+  contact,
+  onContactChange,
+  onSubmit,
+  canSubmit,
+  submitting,
+  submitted,
+  submitError,
+}: {
+  form: FormState;
+  priceRange: { low: number; high: number } | null;
+  contact: ContactState;
+  onContactChange: (field: keyof ContactState, value: string) => void;
+  onSubmit: () => void;
+  canSubmit: boolean;
+  submitting: boolean;
+  submitted: null | "ok" | "error";
+  submitError: string | null;
+}) {
+  return (
+    <>
+      <h2 className="text-xl md:text-2xl font-semibold mb-3">
+        Here&apos;s your ballpark range.
+      </h2>
+      <p className="text-sm text-slate-300 mb-6">
+        This isn&apos;t a gimmick number — it&apos;s a realistic bracket based
+        on the project type, approximate square footage, and the kind of work
+        Leon&apos;s typically does in homes like yours.
+      </p>
+
+      <div className="grid gap-4 md:grid-cols-2 mb-6">
+        <div className="rounded-2xl border border-emerald-500 bg-slate-900/80 p-5">
+          <p className="text-xs uppercase tracking-[0.2em] text-emerald-300 mb-2">
+            ESTIMATED RANGE
+          </p>
+          {priceRange ? (
+            <>
+              <p className="text-2xl font-semibold mb-1">
+                ${priceRange.low.toLocaleString()} – $
+                {priceRange.high.toLocaleString()}
+              </p>
+              <p className="text-xs text-slate-300">
+                Final price depends on details like subfloor, repairs, stairs,
+                finish system, and design choices.{" "}
+                <span className="text-emerald-300">
+                  No surprises — all of that is explained before you ever sign.
+                </span>
+              </p>
+            </>
+          ) : (
+            <p className="text-sm text-slate-300">
+              Add a square footage estimate in the previous step to see your
+              range.
             </p>
+          )}
+        </div>
 
-            <div className="mt-4 rounded-lg border border-amber-500/40 bg-amber-500/5 p-3 space-y-2">
-              <p className="text-[11px] font-semibold uppercase tracking-wide text-amber-300">
-                Visual person?
-              </p>
-              <p className="text-[11px] text-amber-100">
-                Use our experimental{" "}
-                <span className="font-semibold">camera floor visualizer</span>{" "}
-                (from the previous step) to layer a few profiles over your real
-                room and feel the tone before we bring samples.
-              </p>
-              <p className="text-[10px] text-amber-200/80">
-                Works best on a recent iPhone or Android in good lighting. It’s
-                a visual toy — we still confirm everything in person.
-              </p>
-            </div>
+        <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-5 text-sm space-y-3">
+          <div>
+            <p className="text-xs uppercase tracking-[0.2em] text-slate-400 mb-1">
+              PROJECT TYPE
+            </p>
+            <p className="text-slate-100">
+              {PROJECT_TYPES.find((p) => p.id === form.projectType)?.label ??
+                "—"}
+            </p>
+          </div>
+          <div>
+            <p className="text-xs uppercase tracking-[0.2em] text-slate-400 mb-1">
+              APPROX. SQUARE FOOTAGE
+            </p>
+            <p className="text-slate-100">
+              {form.sqft ? `${form.sqft} sq ft` : "—"}
+            </p>
+          </div>
+          <div>
+            <p className="text-xs uppercase tracking-[0.2em] text-slate-400 mb-1">
+              TIMELINE
+            </p>
+            <p className="text-slate-100">
+              {TIMELINES.find((t) => t.id === form.timeline)?.label ?? "—"}
+            </p>
           </div>
         </div>
       </div>
-    </main>
+
+      {/* Contact + appointment options */}
+      <div className="border border-slate-800 rounded-2xl bg-slate-900/70 p-5 space-y-4 mb-4">
+        <h3 className="text-sm font-semibold text-slate-100">
+          Want to save this estimate and talk through next steps?
+        </h3>
+        <p className="text-xs text-slate-300">
+          Share a bit of contact info and how you&apos;d like to connect.{" "}
+          <span className="text-emerald-300">
+            No hard sales, no spam — just a real person from Leon&apos;s.
+          </span>
+        </p>
+
+        <div className="grid gap-3 md:grid-cols-2">
+          <div className="space-y-2">
+            <label className="block text-[11px] uppercase tracking-[0.2em] text-slate-400">
+              NAME
+            </label>
+            <input
+              type="text"
+              value={contact.name}
+              onChange={(e) => onContactChange("name", e.target.value)}
+              placeholder="Your name"
+              className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-xs text-slate-100 placeholder:text-slate-500 focus:outline-none focus:border-emerald-400"
+            />
+
+            <label className="block text-[11px] uppercase tracking-[0.2em] text-slate-400 mt-3">
+              EMAIL
+            </label>
+            <input
+              type="email"
+              value={contact.email}
+              onChange={(e) => onContactChange("email", e.target.value)}
+              placeholder="Optional, but helpful"
+              className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-xs text-slate-100 placeholder:text-slate-500 focus:outline-none focus:border-emerald-400"
+            />
+
+            <label className="block text-[11px] uppercase tracking-[0.2em] text-slate-400 mt-3">
+              PHONE
+            </label>
+            <input
+              type="tel"
+              value={contact.phone}
+              onChange={(e) => onContactChange("phone", e.target.value)}
+              placeholder="Best number to reach you"
+              className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-xs text-slate-100 placeholder:text-slate-500 focus:outline-none focus:border-emerald-400"
+            />
+          </div>
+
+          <div className="space-y-2">
+            <label className="block text-[11px] uppercase tracking-[0.2em] text-slate-400">
+              CITY / ZIP
+            </label>
+            <input
+              type="text"
+              value={contact.zip}
+              onChange={(e) => onContactChange("zip", e.target.value)}
+              placeholder="e.g. 90026"
+              className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-xs text-slate-100 placeholder:text-slate-500 focus:outline-none focus:border-emerald-400"
+            />
+
+            <label className="block text-[11px] uppercase tracking-[0.2em] text-slate-400 mt-3">
+              HOW WOULD YOU LIKE TO CONNECT?
+            </label>
+            <select
+              value={contact.appointmentType}
+              onChange={(e) =>
+                onContactChange("appointmentType", e.target.value)
+              }
+              className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-emerald-400"
+            >
+              <option value="">Pick an option</option>
+              {APPOINTMENT_TYPES.map((opt) => (
+                <option key={opt.id} value={opt.id}>
+                  {opt.label}
+                </option>
+              ))}
+            </select>
+
+            <div className="grid grid-cols-2 gap-2 mt-3">
+              <div>
+                <label className="block text-[11px] uppercase tracking-[0.2em] text-slate-400 mb-1">
+                  PREFERRED DATE
+                </label>
+                <input
+                  type="date"
+                  value={contact.preferredDate}
+                  onChange={(e) =>
+                    onContactChange("preferredDate", e.target.value)
+                  }
+                  className="w-full rounded-xl border border-slate-700 bg-slate-950 px-2 py-2 text-[11px] text-slate-100 focus:outline-none focus:border-emerald-400"
+                />
+              </div>
+              <div>
+                <label className="block text-[11px] uppercase tracking-[0.2em] text-slate-400 mb-1">
+                  PREFERRED TIME
+                </label>
+                <input
+                  type="time"
+                  value={contact.preferredTime}
+                  onChange={(e) =>
+                    onContactChange("preferredTime", e.target.value)
+                  }
+                  className="w-full rounded-xl border border-slate-700 bg-slate-950 px-2 py-2 text-[11px] text-slate-100 focus:outline-none focus:border-emerald-400"
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div>
+          <label className="block text-[11px] uppercase tracking-[0.2em] text-slate-400 mb-1 mt-3">
+            ANYTHING ELSE WE SHOULD KNOW?
+          </label>
+          <textarea
+            rows={3}
+            value={contact.notes}
+            onChange={(e) => onContactChange("notes", e.target.value)}
+            placeholder="Pets, building rules, special requests, or anything you want us to keep in mind."
+            className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-xs text-slate-100 placeholder:text-slate-500 focus:outline-none focus:border-emerald-400"
+          />
+        </div>
+      </div>
+
+      <div className="mt-4 flex flex-col gap-2">
+        <button
+          type="button"
+          onClick={onSubmit}
+          disabled={!canSubmit || submitting}
+          className="text-xs md:text-sm rounded-xl bg-emerald-500 px-5 py-2 font-medium text-slate-950 disabled:bg-slate-700 disabled:text-slate-400 disabled:cursor-not-allowed hover:bg-emerald-400 transition"
+        >
+          {submitting
+            ? "Saving your estimate…"
+            : submitted === "ok"
+            ? "Saved — we’ll follow up shortly"
+            : "Save this estimate & continue with Leon's"}
+        </button>
+
+        {submitted === "ok" && (
+          <p className="text-[11px] text-emerald-300">
+            Got it — your estimate and project details are on file. A Leon&apos;s
+            estimator will reach out using the contact info you provided.
+          </p>
+        )}
+
+        {submitted === "error" && submitError && (
+          <p className="text-[11px] text-red-400">
+            Something went wrong saving your details: {submitError}
+          </p>
+        )}
+
+        {submitted === null && (
+          <p className="text-[11px] text-slate-500">
+            Name + one way to reach you (phone or email) and how you&apos;d like
+            to connect are required. Everything else just helps us be more
+            prepared.
+          </p>
+        )}
+      </div>
+
+      <p className="text-[11px] text-slate-500 mt-4">
+        No spam, ever. Your info stays between you and Leon&apos;s, and you can
+        always tell us if you prefer text, call, or email.
+      </p>
+    </>
   );
 }
