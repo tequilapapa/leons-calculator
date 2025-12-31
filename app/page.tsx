@@ -1,708 +1,433 @@
-"use client";
+"use client"
 
-import { useState, useMemo } from "react";
+import type React from "react"
 
-const PROJECT_TYPES = [
-  {
-    id: "refinish",
-    label: "Refinishing existing hardwood",
-    description: "Keep your current wood, upgrade the look.",
-  },
-  {
-    id: "new-hardwood",
-    label: "New hardwood installation",
-    description: "Fresh install — new layout, new vibe.",
-  },
-  {
-    id: "lvp",
-    label: "Luxury vinyl / waterproof options",
-    description: "Budget-friendly, durable, kid- and dog-proof.",
-  },
-  {
-    id: "kitchen-remodel",
-    label: "Kitchen or full remodel",
-    description: "Floors + cabinets + layout — full transformation.",
-  },
-];
+import { useState, useEffect, useRef } from "react"
+import { createClient } from "@/lib/supabase/client"
+import { Button } from "@/components/ui/button"
+import { Card } from "@/components/ui/card"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { Textarea } from "@/components/ui/textarea"
+import { Camera, Ruler, DollarSign, ChevronRight, X, Check } from "lucide-react"
 
-const TIMELINES = [
-  { id: "asap", label: "ASAP", caption: "Something urgent going on." },
-  {
-    id: "2-4-weeks",
-    label: "Within 2–4 weeks",
-    caption: "Perfect for most projects.",
-  },
-  {
-    id: "1-2-months",
-    label: "Within 1–2 months",
-    caption: "Plenty of time to plan.",
-  },
-  {
-    id: "2-plus-months",
-    label: "2+ months out",
-    caption: "No rush, just exploring options.",
-  },
-];
-
-const APPOINTMENT_TYPES = [
-  { id: "info-call", label: "Just an informational call" },
-  { id: "virtual", label: "Virtual consult" },
-  { id: "in-person", label: "On-site visit / measurement" },
-  { id: "undecided", label: "Not sure yet, just exploring" },
-];
-
-function getPriceRange({ projectType, sqft }: { projectType: string; sqft: string }) {
-  const area = Number(sqft);
-  if (!projectType || !area || Number.isNaN(area)) return null;
-
-  let lowPer = 8;
-  let highPer = 18;
-
-  switch (projectType) {
-    case "refinish":
-      lowPer = 4;
-      highPer = 9;
-      break;
-    case "new-hardwood":
-      lowPer = 9;
-      highPer = 20;
-      break;
-    case "lvp":
-      lowPer = 5;
-      highPer = 12;
-      break;
-    case "kitchen-remodel":
-      lowPer = 18;
-      highPer = 35;
-      break;
-    default:
-      break;
-  }
-
-  return {
-    low: Math.round(area * lowPer),
-    high: Math.round(area * highPer),
-  };
+interface WoodProfile {
+  id: string
+  name: string
+  description: string
+  image_url: string
+  price_per_sqft: number
+  color: string
+  wood_type: string
+  finish: string
 }
 
-interface FormState {
-  projectType: string;
-  sqft: string;
-  timeline: string;
+interface LeadFormData {
+  name: string
+  email: string
+  phone: string
+  address: string
+  notes: string
 }
 
-interface ContactState {
-  name: string;
-  email: string;
-  phone: string;
-  zip: string;
-  appointmentType: string;
-  preferredDate: string;
-  preferredTime: string;
-  notes: string;
-}
-
-export default function CalculatorPage() {
-  const [step, setStep] = useState(1);
-  const [form, setForm] = useState<FormState>({
-    projectType: "",
-    sqft: "",
-    timeline: "",
-  });
-
-  const [contact, setContact] = useState<ContactState>({
+export default function ARVisualizerPage() {
+  const [woodProfiles, setWoodProfiles] = useState<WoodProfile[]>([])
+  const [selectedWood, setSelectedWood] = useState<WoodProfile | null>(null)
+  const [cameraActive, setCameraActive] = useState(false)
+  const [measurements, setMeasurements] = useState({
+    length: 0,
+    width: 0,
+    sqft: 0,
+  })
+  const [estimatedPrice, setEstimatedPrice] = useState(0)
+  const [showLeadForm, setShowLeadForm] = useState(false)
+  const [leadFormData, setLeadFormData] = useState<LeadFormData>({
     name: "",
     email: "",
     phone: "",
-    zip: "",
-    appointmentType: "",
-    preferredDate: "",
-    preferredTime: "",
+    address: "",
     notes: "",
-  });
+  })
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const videoRef = useRef<HTMLVideoElement>(null)
+  const canvasRef = useRef<HTMLCanvasElement>(null)
 
-  const [submitting, setSubmitting] = useState(false);
-  const [submitted, setSubmitted] = useState<null | "ok" | "error">(null);
-  const [submitError, setSubmitError] = useState<string | null>(null);
+  useEffect(() => {
+    loadWoodProfiles()
+  }, [])
 
-  const totalSteps = 4;
+  useEffect(() => {
+    if (measurements.length && measurements.width) {
+      const sqft = measurements.length * measurements.width
+      setMeasurements((prev) => ({ ...prev, sqft }))
 
-  const priceRange = useMemo(
-    () => getPriceRange({ projectType: form.projectType, sqft: form.sqft }),
-    [form.projectType, form.sqft]
-  );
+      if (selectedWood) {
+        setEstimatedPrice(sqft * selectedWood.price_per_sqft)
+      }
+    }
+  }, [measurements.length, measurements.width, selectedWood])
 
-  const canNext =
-    (step === 1 && !!form.projectType) ||
-    (step === 2 && !!form.sqft) ||
-    (step === 3 && !!form.timeline) ||
-    step === 4;
+  const loadWoodProfiles = async () => {
+    const supabase = createClient()
+    const { data, error } = await supabase.from("wood_profiles").select("*").order("created_at", { ascending: false })
 
-  function next() {
-    if (step < totalSteps && canNext) setStep(step + 1);
+    if (data && !error) {
+      setWoodProfiles(data)
+    }
   }
 
-  function back() {
-    if (step > 1) setStep(step - 1);
+  const startCamera = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: "environment" },
+      })
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream
+        setCameraActive(true)
+      }
+    } catch (error) {
+      console.error("Camera error:", error)
+      alert("Unable to access camera. Please grant camera permissions.")
+    }
   }
 
-  function updateField(field: keyof FormState, value: string) {
-    setForm((prev) => ({ ...prev, [field]: value }));
+  const stopCamera = () => {
+    if (videoRef.current && videoRef.current.srcObject) {
+      const stream = videoRef.current.srcObject as MediaStream
+      stream.getTracks().forEach((track) => track.stop())
+      videoRef.current.srcObject = null
+      setCameraActive(false)
+    }
   }
 
-  function updateContact(field: keyof ContactState, value: string) {
-    setContact((prev) => ({ ...prev, [field]: value }));
-  }
-
-  const canSubmit =
-    !!priceRange &&
-    !!contact.name &&
-    (!!contact.phone || !!contact.email) &&
-    !!contact.appointmentType;
-
-  async function handleSubmit() {
-    if (!priceRange) return;
-
-    setSubmitting(true);
-    setSubmitted(null);
-    setSubmitError(null);
+  const handleSubmitLead = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setIsSubmitting(true)
 
     try {
-      const res = await fetch("/api/leads", {
+      const response = await fetch("/api/submit-lead", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          projectType: form.projectType,
-          size: Number(form.sqft),
-          extras: {
-            timeline: form.timeline,
-            appointmentType: contact.appointmentType,
-            preferredDate: contact.preferredDate || null,
-            preferredTime: contact.preferredTime || null,
-            notes: contact.notes || null,
+          name: leadFormData.name,
+          email: leadFormData.email,
+          phone: leadFormData.phone,
+          address: leadFormData.address,
+          projectType: "flooring",
+          selectedWoodId: selectedWood?.id,
+          estimatedSqft: measurements.sqft,
+          estimatedPrice,
+          roomMeasurements: measurements,
+          arSessionData: {
+            woodSelected: selectedWood?.name,
+            timestamp: new Date().toISOString(),
           },
-          zip: contact.zip || null,
-          estimateRange: priceRange,
-          contact: {
-            name: contact.name,
-            email: contact.email || null,
-            phone: contact.phone || null,
-          },
-          meta: {
-            source: "leons-calculator",
-            createdAt: new Date().toISOString(),
-            // You can add more meta later (utm, pageUrl, etc.)
-          },
+          notes: leadFormData.notes,
         }),
-      });
+      })
 
-      const data = await res.json();
-
-      if (!res.ok || !data.ok) {
-        throw new Error(data.error || "Submission failed");
+      if (response.ok) {
+        alert("Thank you! We'll contact you soon with a detailed quote.")
+        setShowLeadForm(false)
+        setLeadFormData({
+          name: "",
+          email: "",
+          phone: "",
+          address: "",
+          notes: "",
+        })
+      } else {
+        alert("Failed to submit. Please try again.")
       }
-
-      setSubmitted("ok");
-    } catch (err: any) {
-      console.error("Lead submit error:", err);
-      setSubmitError(err?.message || "Something went wrong submitting your details.");
-      setSubmitted("error");
+    } catch (error) {
+      console.error("Submit error:", error)
+      alert("Failed to submit. Please try again.")
     } finally {
-      setSubmitting(false);
+      setIsSubmitting(false)
     }
   }
 
   return (
-    <main className="min-h-screen flex flex-col items-center px-4 py-10">
+    <div className="min-h-screen bg-slate-950">
       {/* Header */}
-      <section className="w-full max-w-3xl text-center mb-8">
-        <h1 className="text-3xl md:text-4xl font-semibold tracking-tight mb-4">
-          Leon&apos;s Project Calculator
-        </h1>
-        <p className="text-sm md:text-base text-slate-300 max-w-xl mx-auto">
-          Get a transparent, no-pressure price range for your flooring or
-          kitchen project in just a few steps. No fake suspense, no spam — just
-          real numbers and clear options.
-        </p>
-      </section>
-
-      {/* Card */}
-      <section className="w-full max-w-3xl bg-slate-900/70 border border-slate-800 rounded-2xl p-6 md:p-8 shadow-xl">
-        {/* Progress */}
-        <div className="flex items-center justify-between mb-4">
-          <p className="text-xs uppercase tracking-[0.2em] text-slate-400">
-            Step {step}
-          </p>
-          <div className="flex-1 ml-4 h-1 rounded-full bg-slate-800 overflow-hidden">
-            <div
-              className="h-full bg-emerald-400 transition-all"
-              style={{ width: `${(step / totalSteps) * 100}%` }}
-            />
+      <div className="border-b border-slate-800 bg-slate-900/50 backdrop-blur-sm">
+        <div className="mx-auto max-w-7xl px-4 py-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <h1 className="text-2xl font-bold text-white">AR Wood Visualizer</h1>
+              <p className="text-sm text-slate-400">Visualize and measure your space in real-time</p>
+            </div>
+            <Button
+              onClick={() => (window.location.href = "/calculator")}
+              variant="outline"
+              className="border-orange-600/50 text-orange-500 hover:bg-orange-600/10"
+            >
+              <DollarSign className="mr-2 h-4 w-4" />
+              Price Calculator
+            </Button>
           </div>
         </div>
+      </div>
 
-        {/* Step content */}
-        {step === 1 && (
-          <StepProjectType
-            value={form.projectType}
-            onChange={(v) => updateField("projectType", v)}
-          />
+      <div className="mx-auto max-w-7xl p-4">
+        {/* Camera View */}
+        {!cameraActive ? (
+          <Card className="mb-6 overflow-hidden border-slate-800 bg-slate-900">
+            <div className="relative aspect-video w-full bg-slate-950">
+              <div className="flex h-full items-center justify-center">
+                <Button onClick={startCamera} size="lg" className="gap-2 bg-orange-600 hover:bg-orange-700">
+                  <Camera className="h-5 w-5" />
+                  Start AR Camera
+                </Button>
+              </div>
+            </div>
+          </Card>
+        ) : (
+          <Card className="mb-6 overflow-hidden border-slate-800 bg-slate-900">
+            <div className="relative aspect-video w-full">
+              <video ref={videoRef} autoPlay playsInline className="h-full w-full object-cover" />
+              <canvas ref={canvasRef} className="absolute inset-0 h-full w-full" />
+
+              {/* AR Overlay */}
+              {selectedWood && (
+                <div className="absolute bottom-4 left-4 right-4">
+                  <div className="rounded-lg bg-black/70 p-3 backdrop-blur-sm">
+                    <div className="flex items-center gap-3">
+                      <img
+                        src={selectedWood.image_url || "/placeholder.svg"}
+                        alt={selectedWood.name}
+                        className="h-12 w-12 rounded object-cover"
+                      />
+                      <div className="flex-1 text-white">
+                        <p className="font-semibold">{selectedWood.name}</p>
+                        <p className="text-xs text-slate-300">${selectedWood.price_per_sqft}/sq ft</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              <Button onClick={stopCamera} variant="destructive" size="icon" className="absolute right-4 top-4">
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+          </Card>
         )}
 
-        {step === 2 && (
-          <StepSqft
-            projectType={form.projectType}
-            value={form.sqft}
-            onChange={(v) => updateField("sqft", v)}
-          />
-        )}
+        <div className="grid gap-6 lg:grid-cols-3">
+          {/* Wood Selection */}
+          <div className="lg:col-span-2">
+            <Card className="border-slate-800 bg-slate-900 p-6">
+              <h2 className="mb-4 text-xl font-bold text-white">Select Wood Profile</h2>
+              <div className="grid gap-4 sm:grid-cols-2">
+                {woodProfiles.map((wood) => (
+                  <button
+                    key={wood.id}
+                    onClick={() => setSelectedWood(wood)}
+                    className={`group relative overflow-hidden rounded-lg border-2 transition-all ${
+                      selectedWood?.id === wood.id
+                        ? "border-orange-600 ring-2 ring-orange-600/50"
+                        : "border-slate-700 hover:border-slate-600"
+                    }`}
+                  >
+                    <div className="aspect-video w-full overflow-hidden">
+                      <img
+                        src={wood.image_url || "/placeholder.svg"}
+                        alt={wood.name}
+                        className="h-full w-full object-cover transition-transform group-hover:scale-105"
+                      />
+                    </div>
+                    <div className="bg-slate-800/90 p-3 backdrop-blur-sm">
+                      <p className="font-semibold text-white">{wood.name}</p>
+                      <div className="mt-1 flex items-center justify-between text-sm">
+                        <span className="text-slate-400">{wood.wood_type}</span>
+                        <span className="font-semibold text-orange-500">${wood.price_per_sqft}/sq ft</span>
+                      </div>
+                    </div>
+                    {selectedWood?.id === wood.id && (
+                      <div className="absolute right-2 top-2 rounded-full bg-orange-600 p-1">
+                        <Check className="h-4 w-4 text-white" />
+                      </div>
+                    )}
+                  </button>
+                ))}
+              </div>
+            </Card>
+          </div>
 
-        {step === 3 && (
-          <StepTimeline
-            value={form.timeline}
-            onChange={(v) => updateField("timeline", v)}
-          />
-        )}
+          {/* Measurements & Price */}
+          <div className="space-y-6">
+            <Card className="border-slate-800 bg-slate-900 p-6">
+              <div className="mb-4 flex items-center gap-2">
+                <Ruler className="h-5 w-5 text-orange-600" />
+                <h2 className="text-xl font-bold text-white">Measurements</h2>
+              </div>
+              <div className="space-y-4">
+                <div>
+                  <Label htmlFor="length" className="text-slate-300">
+                    Length (ft)
+                  </Label>
+                  <Input
+                    id="length"
+                    type="number"
+                    step="0.1"
+                    value={measurements.length || ""}
+                    onChange={(e) =>
+                      setMeasurements({
+                        ...measurements,
+                        length: Number.parseFloat(e.target.value) || 0,
+                      })
+                    }
+                    className="mt-1 border-slate-700 bg-slate-800 text-white"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="width" className="text-slate-300">
+                    Width (ft)
+                  </Label>
+                  <Input
+                    id="width"
+                    type="number"
+                    step="0.1"
+                    value={measurements.width || ""}
+                    onChange={(e) =>
+                      setMeasurements({
+                        ...measurements,
+                        width: Number.parseFloat(e.target.value) || 0,
+                      })
+                    }
+                    className="mt-1 border-slate-700 bg-slate-800 text-white"
+                  />
+                </div>
+                {measurements.sqft > 0 && (
+                  <div className="rounded-lg bg-slate-800 p-3">
+                    <p className="text-sm text-slate-400">Total Area</p>
+                    <p className="text-2xl font-bold text-white">{measurements.sqft.toFixed(1)} sq ft</p>
+                  </div>
+                )}
+              </div>
+            </Card>
 
-        {step === 4 && (
-          <StepSummary
-            form={form}
-            priceRange={priceRange}
-            contact={contact}
-            onContactChange={updateContact}
-            onSubmit={handleSubmit}
-            canSubmit={canSubmit}
-            submitting={submitting}
-            submitted={submitted}
-            submitError={submitError}
-          />
-        )}
-
-        {/* Nav buttons */}
-        <div className="mt-8 flex items-center justify-between gap-4">
-          <button
-            onClick={back}
-            disabled={step === 1}
-            className="text-xs md:text-sm rounded-xl border border-slate-700 px-4 py-2 text-slate-200 disabled:opacity-40 disabled:cursor-default hover:border-slate-500 transition"
-          >
-            ← Back
-          </button>
-
-          <div className="flex items-center gap-3">
-            {step < totalSteps && (
-              <button
-                onClick={next}
-                disabled={!canNext}
-                className="text-xs md:text-sm rounded-xl bg-emerald-500 px-5 py-2 font-medium text-slate-950 disabled:bg-slate-700 disabled:text-slate-400 disabled:cursor-not-allowed hover:bg-emerald-400 transition"
-              >
-                Next
-              </button>
+            {selectedWood && measurements.sqft > 0 && (
+              <Card className="border-orange-600/50 bg-slate-900 p-6">
+                <div className="mb-4 flex items-center gap-2">
+                  <DollarSign className="h-5 w-5 text-orange-600" />
+                  <h2 className="text-xl font-bold text-white">Price Estimate</h2>
+                </div>
+                <div className="space-y-2 text-slate-300">
+                  <div className="flex justify-between">
+                    <span>Material:</span>
+                    <span className="font-semibold text-white">
+                      ${(measurements.sqft * selectedWood.price_per_sqft).toFixed(2)}
+                    </span>
+                  </div>
+                  <div className="border-t border-slate-700 pt-2">
+                    <div className="flex justify-between text-lg">
+                      <span className="font-semibold text-white">Estimated Total:</span>
+                      <span className="font-bold text-orange-600">${estimatedPrice.toFixed(2)}</span>
+                    </div>
+                  </div>
+                </div>
+                <Button onClick={() => setShowLeadForm(true)} className="mt-4 w-full bg-orange-600 hover:bg-orange-700">
+                  Get Detailed Quote
+                  <ChevronRight className="ml-2 h-4 w-4" />
+                </Button>
+              </Card>
             )}
           </div>
         </div>
-
-        <p className="text-[11px] text-slate-500 mt-4">
-          This calculator is for ballpark ranges only. Final pricing is always
-          verified on site so there are no surprises — ever.
-        </p>
-      </section>
-    </main>
-  );
-}
-
-function StepProjectType({
-  value,
-  onChange,
-}: {
-  value: string;
-  onChange: (v: string) => void;
-}) {
-  return (
-    <>
-      <h2 className="text-xl md:text-2xl font-semibold mb-3">
-        What kind of project are you working on?
-      </h2>
-      <p className="text-sm text-slate-300 mb-6">
-        We&apos;ll use your answer to shape realistic price ranges and explain
-        what&apos;s involved — so you understand the &quot;why&quot; behind the
-        numbers.
-      </p>
-
-      <div className="grid gap-3 md:grid-cols-2">
-        {PROJECT_TYPES.map((option) => {
-          const active = value === option.id;
-          return (
-            <button
-              key={option.id}
-              type="button"
-              onClick={() => onChange(option.id)}
-              className={`w-full rounded-xl border px-4 py-3 text-left text-sm transition ${
-                active
-                  ? "border-emerald-400 bg-slate-900/90"
-                  : "border-slate-700 bg-slate-900 hover:border-emerald-400 hover:bg-slate-900/80"
-              }`}
-            >
-              <span className="block font-medium">{option.label}</span>
-              <span className="block text-xs text-slate-400">
-                {option.description}
-              </span>
-            </button>
-          );
-        })}
-      </div>
-    </>
-  );
-}
-
-function StepSqft({
-  projectType,
-  value,
-  onChange,
-}: {
-  projectType: string;
-  value: string;
-  onChange: (v: string) => void;
-}) {
-  const project =
-    PROJECT_TYPES.find((p) => p.id === projectType)?.label || "your project";
-
-  return (
-    <>
-      <h2 className="text-xl md:text-2xl font-semibold mb-3">
-        About how many square feet are we working with?
-      </h2>
-      <p className="text-sm text-slate-300 mb-6">
-        It doesn&apos;t have to be perfect — a good guess lets us build a
-        realistic range for {project}. You can use your listing, plans, or just
-        rough room sizes.
-      </p>
-
-      <div className="space-y-4">
-        <div>
-          <label className="block text-xs uppercase tracking-[0.2em] text-slate-400 mb-2">
-            APPROXIMATE SQUARE FOOTAGE
-          </label>
-          <div className="flex items-center gap-3">
-            <input
-              type="number"
-              min="100"
-              step="10"
-              value={value}
-              onChange={(e) => onChange(e.target.value)}
-              placeholder="e.g. 800, 1200, 2500…"
-              className="flex-1 rounded-xl border border-slate-700 bg-slate-900 px-4 py-3 text-sm text-slate-100 placeholder:text-slate-500 focus:outline-none focus:border-emerald-400"
-            />
-            <span className="text-xs text-slate-400 whitespace-nowrap">
-              sq ft
-            </span>
-          </div>
-        </div>
-
-        <p className="text-xs text-slate-400">
-          Not sure? Start with your best guess — your estimator will verify
-          measurements on site before anything is final.
-        </p>
-      </div>
-    </>
-  );
-}
-
-function StepTimeline({
-  value,
-  onChange,
-}: {
-  value: string;
-  onChange: (v: string) => void;
-}) {
-  return (
-    <>
-      <h2 className="text-xl md:text-2xl font-semibold mb-3">
-        When do you want this done?
-      </h2>
-      <p className="text-sm text-slate-300 mb-6">
-        Whatever your timing, we&apos;ll work with you to build a plan that
-        makes sense. Faster timelines are possible — they just book up first.
-      </p>
-
-      <div className="grid gap-3 md:grid-cols-2">
-        {TIMELINES.map((option) => {
-          const active = value === option.id;
-          return (
-            <button
-              key={option.id}
-              type="button"
-              onClick={() => onChange(option.id)}
-              className={`w-full rounded-xl border px-4 py-3 text-left text-sm transition ${
-                active
-                  ? "border-emerald-400 bg-slate-900/90"
-                  : "border-slate-700 bg-slate-900 hover:border-emerald-400 hover:bg-slate-900/80"
-              }`}
-            >
-              <span className="block font-medium">{option.label}</span>
-              <span className="block text-xs text-slate-400">
-                {option.caption}
-              </span>
-            </button>
-          );
-        })}
-      </div>
-    </>
-  );
-}
-
-function StepSummary({
-  form,
-  priceRange,
-  contact,
-  onContactChange,
-  onSubmit,
-  canSubmit,
-  submitting,
-  submitted,
-  submitError,
-}: {
-  form: FormState;
-  priceRange: { low: number; high: number } | null;
-  contact: ContactState;
-  onContactChange: (field: keyof ContactState, value: string) => void;
-  onSubmit: () => void;
-  canSubmit: boolean;
-  submitting: boolean;
-  submitted: null | "ok" | "error";
-  submitError: string | null;
-}) {
-  return (
-    <>
-      <h2 className="text-xl md:text-2xl font-semibold mb-3">
-        Here&apos;s your ballpark range.
-      </h2>
-      <p className="text-sm text-slate-300 mb-6">
-        This isn&apos;t a gimmick number — it&apos;s a realistic bracket based
-        on the project type, approximate square footage, and the kind of work
-        Leon&apos;s typically does in homes like yours.
-      </p>
-
-      <div className="grid gap-4 md:grid-cols-2 mb-6">
-        <div className="rounded-2xl border border-emerald-500 bg-slate-900/80 p-5">
-          <p className="text-xs uppercase tracking-[0.2em] text-emerald-300 mb-2">
-            ESTIMATED RANGE
-          </p>
-          {priceRange ? (
-            <>
-              <p className="text-2xl font-semibold mb-1">
-                ${priceRange.low.toLocaleString()} – $
-                {priceRange.high.toLocaleString()}
-              </p>
-              <p className="text-xs text-slate-300">
-                Final price depends on details like subfloor, repairs, stairs,
-                finish system, and design choices.{" "}
-                <span className="text-emerald-300">
-                  No surprises — all of that is explained before you ever sign.
-                </span>
-              </p>
-            </>
-          ) : (
-            <p className="text-sm text-slate-300">
-              Add a square footage estimate in the previous step to see your
-              range.
-            </p>
-          )}
-        </div>
-
-        <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-5 text-sm space-y-3">
-          <div>
-            <p className="text-xs uppercase tracking-[0.2em] text-slate-400 mb-1">
-              PROJECT TYPE
-            </p>
-            <p className="text-slate-100">
-              {PROJECT_TYPES.find((p) => p.id === form.projectType)?.label ??
-                "—"}
-            </p>
-          </div>
-          <div>
-            <p className="text-xs uppercase tracking-[0.2em] text-slate-400 mb-1">
-              APPROX. SQUARE FOOTAGE
-            </p>
-            <p className="text-slate-100">
-              {form.sqft ? `${form.sqft} sq ft` : "—"}
-            </p>
-          </div>
-          <div>
-            <p className="text-xs uppercase tracking-[0.2em] text-slate-400 mb-1">
-              TIMELINE
-            </p>
-            <p className="text-slate-100">
-              {TIMELINES.find((t) => t.id === form.timeline)?.label ?? "—"}
-            </p>
-          </div>
-        </div>
       </div>
 
-      {/* Contact + appointment options */}
-      <div className="border border-slate-800 rounded-2xl bg-slate-900/70 p-5 space-y-4 mb-4">
-        <h3 className="text-sm font-semibold text-slate-100">
-          Want to save this estimate and talk through next steps?
-        </h3>
-        <p className="text-xs text-slate-300">
-          Share a bit of contact info and how you&apos;d like to connect.{" "}
-          <span className="text-emerald-300">
-            No hard sales, no spam — just a real person from Leon&apos;s.
-          </span>
-        </p>
-
-        <div className="grid gap-3 md:grid-cols-2">
-          <div className="space-y-2">
-            <label className="block text-[11px] uppercase tracking-[0.2em] text-slate-400">
-              NAME
-            </label>
-            <input
-              type="text"
-              value={contact.name}
-              onChange={(e) => onContactChange("name", e.target.value)}
-              placeholder="Your name"
-              className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-xs text-slate-100 placeholder:text-slate-500 focus:outline-none focus:border-emerald-400"
-            />
-
-            <label className="block text-[11px] uppercase tracking-[0.2em] text-slate-400 mt-3">
-              EMAIL
-            </label>
-            <input
-              type="email"
-              value={contact.email}
-              onChange={(e) => onContactChange("email", e.target.value)}
-              placeholder="Optional, but helpful"
-              className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-xs text-slate-100 placeholder:text-slate-500 focus:outline-none focus:border-emerald-400"
-            />
-
-            <label className="block text-[11px] uppercase tracking-[0.2em] text-slate-400 mt-3">
-              PHONE
-            </label>
-            <input
-              type="tel"
-              value={contact.phone}
-              onChange={(e) => onContactChange("phone", e.target.value)}
-              placeholder="Best number to reach you"
-              className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-xs text-slate-100 placeholder:text-slate-500 focus:outline-none focus:border-emerald-400"
-            />
-          </div>
-
-          <div className="space-y-2">
-            <label className="block text-[11px] uppercase tracking-[0.2em] text-slate-400">
-              CITY / ZIP
-            </label>
-            <input
-              type="text"
-              value={contact.zip}
-              onChange={(e) => onContactChange("zip", e.target.value)}
-              placeholder="e.g. 90026"
-              className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-xs text-slate-100 placeholder:text-slate-500 focus:outline-none focus:border-emerald-400"
-            />
-
-            <label className="block text-[11px] uppercase tracking-[0.2em] text-slate-400 mt-3">
-              HOW WOULD YOU LIKE TO CONNECT?
-            </label>
-            <select
-              value={contact.appointmentType}
-              onChange={(e) =>
-                onContactChange("appointmentType", e.target.value)
-              }
-              className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-emerald-400"
-            >
-              <option value="">Pick an option</option>
-              {APPOINTMENT_TYPES.map((opt) => (
-                <option key={opt.id} value={opt.id}>
-                  {opt.label}
-                </option>
-              ))}
-            </select>
-
-            <div className="grid grid-cols-2 gap-2 mt-3">
-              <div>
-                <label className="block text-[11px] uppercase tracking-[0.2em] text-slate-400 mb-1">
-                  PREFERRED DATE
-                </label>
-                <input
-                  type="date"
-                  value={contact.preferredDate}
-                  onChange={(e) =>
-                    onContactChange("preferredDate", e.target.value)
-                  }
-                  className="w-full rounded-xl border border-slate-700 bg-slate-950 px-2 py-2 text-[11px] text-slate-100 focus:outline-none focus:border-emerald-400"
-                />
-              </div>
-              <div>
-                <label className="block text-[11px] uppercase tracking-[0.2em] text-slate-400 mb-1">
-                  PREFERRED TIME
-                </label>
-                <input
-                  type="time"
-                  value={contact.preferredTime}
-                  onChange={(e) =>
-                    onContactChange("preferredTime", e.target.value)
-                  }
-                  className="w-full rounded-xl border border-slate-700 bg-slate-950 px-2 py-2 text-[11px] text-slate-100 focus:outline-none focus:border-emerald-400"
-                />
-              </div>
+      {/* Lead Form Modal */}
+      {showLeadForm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4">
+          <Card className="w-full max-w-md border-slate-800 bg-slate-900">
+            <div className="flex items-center justify-between border-b border-slate-800 p-4">
+              <h2 className="text-xl font-bold text-white">Get Your Detailed Quote</h2>
+              <Button
+                onClick={() => setShowLeadForm(false)}
+                variant="ghost"
+                size="icon"
+                className="text-slate-400 hover:text-white"
+              >
+                <X className="h-4 w-4" />
+              </Button>
             </div>
-          </div>
+            <form onSubmit={handleSubmitLead} className="p-6">
+              <div className="space-y-4">
+                <div>
+                  <Label htmlFor="lead-name" className="text-slate-300">
+                    Full Name *
+                  </Label>
+                  <Input
+                    id="lead-name"
+                    value={leadFormData.name}
+                    onChange={(e) => setLeadFormData({ ...leadFormData, name: e.target.value })}
+                    required
+                    className="mt-1 border-slate-700 bg-slate-800 text-white"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="lead-email" className="text-slate-300">
+                    Email *
+                  </Label>
+                  <Input
+                    id="lead-email"
+                    type="email"
+                    value={leadFormData.email}
+                    onChange={(e) => setLeadFormData({ ...leadFormData, email: e.target.value })}
+                    required
+                    className="mt-1 border-slate-700 bg-slate-800 text-white"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="lead-phone" className="text-slate-300">
+                    Phone
+                  </Label>
+                  <Input
+                    id="lead-phone"
+                    type="tel"
+                    value={leadFormData.phone}
+                    onChange={(e) => setLeadFormData({ ...leadFormData, phone: e.target.value })}
+                    className="mt-1 border-slate-700 bg-slate-800 text-white"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="lead-address" className="text-slate-300">
+                    Project Address
+                  </Label>
+                  <Input
+                    id="lead-address"
+                    value={leadFormData.address}
+                    onChange={(e) =>
+                      setLeadFormData({
+                        ...leadFormData,
+                        address: e.target.value,
+                      })
+                    }
+                    className="mt-1 border-slate-700 bg-slate-800 text-white"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="lead-notes" className="text-slate-300">
+                    Additional Notes
+                  </Label>
+                  <Textarea
+                    id="lead-notes"
+                    value={leadFormData.notes}
+                    onChange={(e) => setLeadFormData({ ...leadFormData, notes: e.target.value })}
+                    rows={3}
+                    className="mt-1 border-slate-700 bg-slate-800 text-white"
+                  />
+                </div>
+                <Button type="submit" disabled={isSubmitting} className="w-full bg-orange-600 hover:bg-orange-700">
+                  {isSubmitting ? "Submitting..." : "Submit Quote Request"}
+                </Button>
+              </div>
+            </form>
+          </Card>
         </div>
-
-        <div>
-          <label className="block text-[11px] uppercase tracking-[0.2em] text-slate-400 mb-1 mt-3">
-            ANYTHING ELSE WE SHOULD KNOW?
-          </label>
-          <textarea
-            rows={3}
-            value={contact.notes}
-            onChange={(e) => onContactChange("notes", e.target.value)}
-            placeholder="Pets, building rules, special requests, or anything you want us to keep in mind."
-            className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-xs text-slate-100 placeholder:text-slate-500 focus:outline-none focus:border-emerald-400"
-          />
-        </div>
-      </div>
-
-      <div className="mt-4 flex flex-col gap-2">
-        <button
-          type="button"
-          onClick={onSubmit}
-          disabled={!canSubmit || submitting}
-          className="text-xs md:text-sm rounded-xl bg-emerald-500 px-5 py-2 font-medium text-slate-950 disabled:bg-slate-700 disabled:text-slate-400 disabled:cursor-not-allowed hover:bg-emerald-400 transition"
-        >
-          {submitting
-            ? "Saving your estimate…"
-            : submitted === "ok"
-            ? "Saved — we’ll follow up shortly"
-            : "Save this estimate & continue with Leon's"}
-        </button>
-
-        {submitted === "ok" && (
-          <p className="text-[11px] text-emerald-300">
-            Got it — your estimate and project details are on file. A Leon&apos;s
-            estimator will reach out using the contact info you provided.
-          </p>
-        )}
-
-        {submitted === "error" && submitError && (
-          <p className="text-[11px] text-red-400">
-            Something went wrong saving your details: {submitError}
-          </p>
-        )}
-
-        {submitted === null && (
-          <p className="text-[11px] text-slate-500">
-            Name + one way to reach you (phone or email) and how you&apos;d like
-            to connect are required. Everything else just helps us be more
-            prepared.
-          </p>
-        )}
-      </div>
-
-      <p className="text-[11px] text-slate-500 mt-4">
-        No spam, ever. Your info stays between you and Leon&apos;s, and you can
-        always tell us if you prefer text, call, or email.
-      </p>
-    </>
-  );
+      )}
+    </div>
+  )
 }
