@@ -78,22 +78,45 @@ export default function ARVisualizerPage() {
 
   const startCamera = async () => {
     try {
-      if (!window.isSecureContext) {
-        throw new Error("Camera access requires a secure connection (HTTPS).");
+      if (!navigator.mediaDevices?.getUserMedia) {
+        alert("Camera not supported in this browser.")
+        return
       }
-      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-        throw new Error("Camera not supported on this device/browser.");
+  
+      const constraints: MediaStreamConstraints = {
+        video: {
+          facingMode: { ideal: "environment" },
+        },
+        audio: false,
       }
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: "environment" },
-      })
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream
-        setCameraActive(true)
+  
+      let stream: MediaStream
+  
+      try {
+        stream = await navigator.mediaDevices.getUserMedia(constraints)
+      } catch (err) {
+        console.warn("Environment camera failed – falling back:", err)
+        stream = await navigator.mediaDevices.getUserMedia({ video: true })
       }
-    } catch (error) {
-      console.error("Camera error:", error)
-      alert(error.message || "Unable to access camera. Please grant camera permissions.")
+  
+      if (!videoRef.current) return
+  
+      const video = videoRef.current
+  
+      video.srcObject = stream
+  
+      // Important for mobile / autoplay
+      video.setAttribute("playsinline", "true")
+      video.setAttribute("autoplay", "true")
+      video.muted = true
+  
+      await video.play()
+  
+      console.log("Camera started successfully")
+      setCameraActive(true)
+    } catch (error: any) {
+      console.error("Camera failed:", error?.name, error?.message || error)
+      alert(`Camera failed: ${error?.name || "Unknown error"}`)
     }
   }
 
