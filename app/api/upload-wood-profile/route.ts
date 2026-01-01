@@ -16,7 +16,43 @@ export async function POST(request: NextRequest) {
     if (!imageFile || !name || !pricePerSqft || !woodType) {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 })
     }
-
+    export async function POST(req: Request) {
+      try {
+        const { records } = (await req.json()) as {
+          records: WoodProfileInsert[];
+        };
+    
+        if (!Array.isArray(records) || records.length === 0) {
+          return NextResponse.json(
+            { error: "No records provided." },
+            { status: 400 }
+          );
+        }
+    
+        const supabase = createClient();
+    
+        const { data, error } = await supabase
+          .from("wood_profiles")
+          .insert(records)
+          .select("id");
+    
+        if (error) {
+          console.error(error);
+          return NextResponse.json({ error: error.message }, { status: 400 });
+        }
+    
+        return NextResponse.json(
+          { inserted: data ? data.length : records.length },
+          { status: 200 }
+        );
+      } catch (err: any) {
+        console.error(err);
+        return NextResponse.json(
+          { error: err.message || "Unexpected error." },
+          { status: 500 }
+        );
+      }
+    
     // Upload image to Vercel Blob
     const blob = await put(`wood-profiles/${imageFile.name}`, imageFile, {
       access: "public",
