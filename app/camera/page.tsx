@@ -78,6 +78,12 @@ export default function ARVisualizerPage() {
 
   const startCamera = async () => {
     try {
+      if (!window.isSecureContext) {
+        throw new Error("Camera access requires a secure connection (HTTPS).");
+      }
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        throw new Error("Camera not supported on this device/browser.");
+      }
       const stream = await navigator.mediaDevices.getUserMedia({
         video: { facingMode: "environment" },
       })
@@ -87,7 +93,7 @@ export default function ARVisualizerPage() {
       }
     } catch (error) {
       console.error("Camera error:", error)
-      alert("Unable to access camera. Please grant camera permissions.")
+      alert(error.message || "Unable to access camera. Please grant camera permissions.")
     }
   }
 
@@ -127,7 +133,7 @@ export default function ARVisualizerPage() {
       })
 
       if (response.ok) {
-        alert("Thank you! We'll contact you soon with a detailed quote.")
+        alert("Thank you! We'''ll contact you soon with a detailed quote.")
         setShowLeadForm(false)
         setLeadFormData({
           name: "",
