@@ -12,6 +12,10 @@ export default function FloorCamera() {
       try {
         setStatus("loading");
 
+        if (!window.isSecureContext) {
+          throw new Error("Camera access requires a secure connection (HTTPS).");
+        }
+
         if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
           throw new Error("Camera not supported on this device/browser.");
         }
@@ -152,4 +156,3 @@ export default function FloorCamera() {
     </div>
   );
 }
-
