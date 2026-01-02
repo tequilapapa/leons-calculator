@@ -1,23 +1,3 @@
-# AR lead intake visualizer
-
-*Automatically synced with deployments*
-
-[![Deployed on Leon’s](https://www.leonshardwood.com)]
-(https://quote.leonshardwood.com)
-[![Deployed on Vercel](https://img.shields.io/badge/Deployed%20on-Vercel-black?style=for-the-badge&logo=vercel)](https://vercel.com/tequilapapas-projects/v0-ar-lead-intake-visualizer)
-
-## Overview
-
-This repository will stay in sync
-changes made to deployed app will be automatically be pushed to this repository from (https://v0.app).
-
-## Deployment
-
-project is live at:
-
-**[https://vercel.com/tequilapapas-projects/v0-ar-lead-intake-visualizer](https://vercel.com/tequilapapas-projects/v0-ar-lead-intake-visualizer)**
-
-## Build app
 # Leon's Hardwood Floors - AR Lead Intake Visualizer
 
 A Next.js application combining a pricing calculator with an AR camera visualizer for hardwood flooring projects. Customers can estimate costs and visualize wood profiles in real-time using their device camera.
