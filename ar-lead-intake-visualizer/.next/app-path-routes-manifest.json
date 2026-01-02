@@ -1,9 +1,0 @@
-{
-  "/_global-error/page": "/_global-error",
-  "/_not-found/page": "/_not-found",
-  "/admin/upload/page": "/admin/upload",
-  "/api/submit-lead/route": "/api/submit-lead",
-  "/api/upload-wood-profile/route": "/api/upload-wood-profile",
-  "/calculator/page": "/calculator",
-  "/page": "/"
-}
