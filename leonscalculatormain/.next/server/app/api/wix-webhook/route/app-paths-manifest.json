@@ -1,0 +1,3 @@
+{
+  "/api/wix-webhook/route": "app/api/wix-webhook/route.js"
+}

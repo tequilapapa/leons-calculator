@@ -1,0 +1,22 @@
+[00:00:04.215] Server  LOG     
+[00:00:04.217] Server  LOG        We detected TypeScript in your project and reconfigured your tsconfig.json file for you.
+[00:00:04.218] Server  LOG        The following suggested values were added to your tsconfig.json. These values can be changed to fit your project's needs:
+
+[00:00:04.219] Server  LOG        	- include was updated to add '.next/dev/types/**/*.ts'
+[00:00:04.220] Server  LOG     
+[00:00:04.227] Server  LOG        The following mandatory changes were made to your tsconfig.json:
+
+[00:00:04.228] Server  LOG        	- jsx was set to react-jsx (next.js uses the React automatic runtime)
+[00:00:04.232] Server  LOG     
+[00:00:05.276] Server  WARN     ⚠ Duplicate page detected. app/page.js and app/page.tsx resolve to /
+[00:00:05.278] Server  WARN     ⚠ Duplicate page detected. app/api/leads/route.js and app/api/leads/route.ts resolve to /api/leads
+[00:00:05.280] Server  WARN     ⚠ Duplicate page detected. app/page.js and app/page.tsx resolve to /
+[00:00:05.281] Server  WARN     ⚠ Duplicate page detected. app/api/leads/route.js and app/api/leads/route.ts resolve to /api/leads
+[00:00:05.287] Server  LOG      ✓ Ready in 3.9s
+[00:00:08.374] Server  LOG      ○ Compiling / ...
+[06:42:27.337] Server  WARN     ⚠ Duplicate page detected. app/page.js and app/page.tsx resolve to /
+[06:42:27.347] Server  WARN     ⚠ Duplicate page detected. app/api/leads/route.js and app/api/leads/route.ts resolve to /api/leads
+[06:42:27.492] Server  ERROR   Error: ENOENT: no such file or directory, scandir '/home/user/leons-calculator/leonscalculatormain/app'
+[06:42:27.535] Server  ERROR    ⨯ "unhandledRejection:" Error: ENOENT: no such file or directory, scandir '/home/user/leons-calculator/leonscalculatormain/app'
+[06:42:27.554] Server  ERROR    ⨯ "unhandledRejection: " Error: ENOENT: no such file or directory, scandir '/home/user/leons-calculator/leonscalculatormain/app'
+[06:42:28.234] Server  LOG      ✓ Compiled in 2.1s

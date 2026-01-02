@@ -1,0 +1,17 @@
+[00:00:03.103] Server  LOG     
+[00:00:03.104] Server  LOG        We detected TypeScript in your project and reconfigured your tsconfig.json file for you.
+[00:00:03.105] Server  LOG        The following suggested values were added to your tsconfig.json. These values can be changed to fit your project's needs:
+
+[00:00:03.106] Server  LOG        	- include was updated to add '.next/dev/types/**/*.ts'
+[00:00:03.106] Server  LOG     
+[00:00:03.106] Server  LOG        The following mandatory changes were made to your tsconfig.json:
+
+[00:00:03.106] Server  LOG        	- jsx was set to react-jsx (next.js uses the React automatic runtime)
+[00:00:03.106] Server  LOG     
+[00:00:03.948] Server  LOG      ✓ Ready in 2.2s
+[00:00:03.957] Server  WARN     ⚠ Cross origin request detected from 9000-firebase-leons-calculator-1767283671137.cluster-t23zgfo255e32uuvburngnfnn4.cloudworkstations.dev to /_next/* resource. In a future major version of Next.js, you will need to explicitly configure "allowedDevOrigins" in next.config to allow this.
+Read more: https://nextjs.org/docs/app/api-reference/config/next-config-js/allowedDevOrigins
+[00:00:07.176] Server  LOG      ○ Compiling /_not-found/page ...
+[00:00:20.839] Browser LOG     %c[Vercel Web Analytics]%c Debug mode is enabled by default in development. No requests will be sent to the server. color: rgb(120, 120, 120) color: inherit
+[00:00:20.839] Browser LOG     %c[Vercel Web Analytics]%c Running queued event color: rgb(120, 120, 120) color: inherit pageview {"path":"/","route":"/"}
+[00:00:20.839] Browser LOG     %c[Vercel Web Analytics]%c [pageview] https://9000-firebase-leons-calculator-1767283671137.cluster-t23zgfo255e32uuvburngnfnn4.cloudworkstations.dev/?monospaceUid=521806 color: rgb(120, 120, 120) color: inherit {"dp":"/","o":"https://9000-firebase-leons-calculator-1767283671137.cluster-t23zgfo255e32uuvburngnfnn4.cloudworkstations.dev/?monospaceUid=521806","sdkn":"@vercel/analytics/next","sdkv":"1.3.1","sv":"0.1.3","ts":1767316240496}
