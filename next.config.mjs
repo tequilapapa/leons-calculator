@@ -7,9 +7,12 @@ const nextConfig = {
     unoptimized: true,
   },
  
+<<<<<<< HEAD
   eslint: {
     ignoreDuringBuilds: true,
   },
+=======
+>>>>>>> 9989abcf (fixes)
 }
 
 export default nextConfig
