@@ -9,7 +9,16 @@ import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { Camera, Ruler, DollarSign, ChevronRight, X, Check, Scan } from 'lucide-react';
+import { Ruler, DollarSign, ChevronRight, X, Check, Scan } from 'lucide-react';
+
+/** --- Fix TS: teach this file about <model-viewer> --- */
+declare global {
+  namespace JSX {
+    interface IntrinsicElements {
+      'model-viewer': any;
+    }
+  }
+}
 
 interface WoodProfile {
   id: string;
@@ -36,7 +45,7 @@ interface LeadFormData {
 
 export default function ARVisualizerPage() {
   const params = useSearchParams();
-  const urlSku = params.get('sku') ?? undefined;
+  const urlSku = params?.get('sku') ?? undefined;
 
   const [woodProfiles, setWoodProfiles] = useState<WoodProfile[]>([]);
   const [selectedWood, setSelectedWood] = useState<WoodProfile | null>(null);
@@ -58,7 +67,7 @@ export default function ARVisualizerPage() {
   // <model-viewer> ref to call activateAR()
   const mvRef = useRef<any>(null);
 
-  // Load profiles from Supabase and preselect by ?sku=
+  // Load profiles and preselect by ?sku=
   useEffect(() => {
     (async () => {
       setLoading(true);
@@ -74,14 +83,13 @@ export default function ARVisualizerPage() {
         const items = (data || []) as unknown as WoodProfile[];
         setWoodProfiles(items);
 
-        // Preselect by SKU (or first with AR assets)
         let pick: WoodProfile | undefined;
         if (urlSku) {
-          pick = items.find(p => (p.sku || '').toLowerCase() === urlSku.toLowerCase() || p.id === urlSku);
+          pick = items.find(
+            (p) => (p.sku || '').toLowerCase() === urlSku.toLowerCase() || p.id === urlSku
+          );
         }
-        if (!pick) {
-          pick = items.find(p => p.glb_url || p.usdz_url) || items[0];
-        }
+        if (!pick) pick = items.find((p) => p.glb_url || p.usdz_url) || items[0];
         setSelectedWood(pick || null);
       } catch (e: any) {
         setErr(e?.message || 'Failed to load wood profiles');
@@ -95,28 +103,28 @@ export default function ARVisualizerPage() {
   useEffect(() => {
     if (measurements.length && measurements.width) {
       const sqft = measurements.length * measurements.width;
-      setMeasurements(prev => ({ ...prev, sqft }));
+      setMeasurements((prev) => ({ ...prev, sqft }));
       if (selectedWood) setEstimatedPrice(sqft * (selectedWood.price_per_sqft || 0));
     }
   }, [measurements.length, measurements.width, selectedWood]);
 
-  // iOS Quick Look only if we actually have a USDZ
   const hasIosUsdz = useMemo(() => Boolean(selectedWood?.usdz_url), [selectedWood]);
 
-  // Explicit AR launch (makes it obvious)
+  // Open native AR
   const openAR = () => {
-    // If model-viewer supports it, use the native trigger
+    if (!selectedWood) return;
+
     if (mvRef.current?.activateAR) {
       mvRef.current.activateAR();
       return;
     }
-    // Manual fallback (rare)
+
     const isIOS = /iPad|iPhone|iPod/i.test(navigator.userAgent);
-    if (isIOS && selectedWood?.usdz_url) {
+    if (isIOS && selectedWood.usdz_url) {
       window.location.href = selectedWood.usdz_url;
       return;
     }
-    if (selectedWood?.glb_url) {
+    if (selectedWood.glb_url) {
       const sceneViewer = new URL('https://arvr.google.com/scene-viewer/1.0');
       sceneViewer.searchParams.set('file', selectedWood.glb_url);
       sceneViewer.searchParams.set('mode', 'ar_only');
@@ -125,6 +133,7 @@ export default function ARVisualizerPage() {
     }
   };
 
+  // Submit lead (do NOT call wood-profiles API here)
   const handleSubmitLead = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
@@ -146,6 +155,7 @@ export default function ARVisualizerPage() {
           notes: leadFormData.notes,
         }),
       });
+
       if (response.ok) {
         alert("Thank you! We'll contact you soon with a detailed quote.");
         setShowLeadForm(false);
@@ -177,7 +187,11 @@ export default function ARVisualizerPage() {
               <p className="text-sm text-slate-400">Place selected floors at true scale. Android + iOS supported.</p>
             </div>
             <div className="flex gap-2">
-              <Button onClick={() => (window.location.href = '/calculator')} variant="outline" className="border-orange-600/50 text-orange-500 hover:bg-orange-600/10">
+              <Button
+                onClick={() => (window.location.href = '/calculator')}
+                variant="outline"
+                className="border-orange-600/50 text-orange-500 hover:bg-orange-600/10"
+              >
                 <DollarSign className="mr-2 h-4 w-4" />
                 Price Calculator
               </Button>
@@ -194,13 +208,9 @@ export default function ARVisualizerPage() {
         {/* AR Viewer */}
         <Card className="mb-6 overflow-hidden border-slate-800 bg-slate-900">
           <div className="relative aspect-video w-full bg-slate-950">
-            {loading && (
-              <div className="flex h-full items-center justify-center text-slate-300">Loading models…</div>
-            )}
+            {loading && <div className="flex h-full items-center justify-center text-slate-300">Loading models…</div>}
 
-            {!loading && err && (
-              <div className="flex h-full items-center justify-center text-red-300">{err}</div>
-            )}
+            {!loading && err && <div className="flex h-full items-center justify-center text-red-300">{err}</div>}
 
             {!loading && !err && !selectedWood && (
               <div className="flex h-full items-center justify-center">
@@ -211,7 +221,6 @@ export default function ARVisualizerPage() {
             {!loading && !err && selectedWood && (
               <>
                 {(selectedWood.glb_url || selectedWood.usdz_url) ? (
-                  // model-viewer renders inline 3D and exposes the AR button/activation
                   <model-viewer
                     ref={mvRef}
                     src={selectedWood.glb_url || ''}
@@ -228,7 +237,6 @@ export default function ARVisualizerPage() {
                     style={{ width: '100%', height: '100%', background: 'transparent' }}
                     onError={(e: any) => console.error('model-viewer error', e?.detail || e)}
                   >
-                    {/* Custom AR button (always visible) */}
                     <Button slot="ar-button" onClick={openAR} className="bg-emerald-600 hover:bg-emerald-700">
                       <Scan className="mr-2 h-4 w-4" />
                       View in your space
@@ -240,7 +248,6 @@ export default function ARVisualizerPage() {
                   </div>
                 )}
 
-                {/* Subtle hint for iOS if USDZ missing */}
                 {!hasIosUsdz && (
                   <div className="absolute bottom-3 left-3 rounded bg-black/60 px-3 py-1 text-xs text-yellow-200">
                     Tip: iPhone AR requires a USDZ. You’ll still see the 3D preview here.

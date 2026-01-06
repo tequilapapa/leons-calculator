@@ -6,17 +6,16 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 )
 
-export async function GET(
-  _req: NextRequest,
-  { params }: { params: Promise<{ sku: string }> }  // <- typedRoutes requires Promise
-) {
-  const { sku } = await params
-  const key = decodeURIComponent(sku || '')
+export const dynamic = 'force-dynamic'
+
+export async function GET(req: NextRequest) {
+  const { searchParams } = new URL(req.url)
+  const key = (searchParams.get('sku') || searchParams.get('id') || '').trim()
   if (!key) return NextResponse.json({ error: 'sku required' }, { status: 400 })
 
   const { data, error } = await supabase
     .from('wood_profiles')
-    .select('id, sku, name, glb_url, usdz_url, poster_url')
+    .select('name, glb_url, usdz_url, poster_url')
     .or(`sku.eq.${key},id.eq.${key}`)
     .maybeSingle()
 
@@ -26,6 +25,6 @@ export async function GET(
     title: data.name,
     glbUrl: data.glb_url,
     usdzUrl: data.usdz_url,
-    posterUrl: data.poster_url ?? null
+    posterUrl: data.poster_url
   })
 }
