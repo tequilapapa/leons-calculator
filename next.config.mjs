@@ -1,8 +1,12 @@
-// next.config.mjs
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  typedRoutes: true,
-  images: { remotePatterns: [{ protocol: 'https', hostname: '**' }] },
+  // put only plain JS here, no TypeScript types like ": NextConfig"
+  images: {
+    remotePatterns: [
+      { protocol: 'https', hostname: 'static.wixstatic.com' },
+      // add more hostnames if you load images elsewhere
+    ],
+  },
 };
 
 export default nextConfig;
