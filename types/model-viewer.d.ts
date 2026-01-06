@@ -1,22 +1,21 @@
 // types/model-viewer.d.ts
-declare namespace JSX {
-  interface IntrinsicElements {
-    'model-viewer': React.DetailedHTMLProps<
-      React.HTMLAttributes<HTMLElement>,
-      HTMLElement
-    > & {
-      src?: string
-      'ios-src'?: string
-      ar?: boolean | ''
-      'ar-modes'?: string
-      'ar-scale'?: string
-      'camera-controls'?: boolean | ''
-      poster?: string
-      exposure?: string | number
-      'touch-action'?: string
-      'interaction-prompt'?: string
-      'interaction-prompt-threshold'?: string | number
-      slot?: string
+import type * as React from 'react';
+
+declare global {
+  // For classic JSX lookup (what the TS error mentions)
+  namespace JSX {
+    interface IntrinsicElements {
+      'model-viewer': any;
+    }
+  }
+
+  // For React 19’s react-jsx runtime (some setups look here)
+  namespace React {
+    namespace JSX {
+      interface IntrinsicElements {
+        'model-viewer': any;
+      }
     }
   }
 }
+export {};

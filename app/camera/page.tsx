@@ -1,3 +1,4 @@
+/// <reference path="../../types/model-viewer.d.ts" />
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
@@ -6,19 +7,10 @@ import { useSearchParams } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
+import { Input } from '@/components/ui/input';  // <- fixed
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Ruler, DollarSign, ChevronRight, X, Check, Scan } from 'lucide-react';
-
-/** --- Fix TS: teach this file about <model-viewer> --- */
-declare global {
-  namespace JSX {
-    interface IntrinsicElements {
-      'model-viewer': any;
-    }
-  }
-}
 
 interface WoodProfile {
   id: string;
