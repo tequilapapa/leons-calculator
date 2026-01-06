@@ -1,18 +1,11 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  typescript: {
-    ignoreBuildErrors: true,
-  },
+  reactStrictMode: true,
   images: {
-    unoptimized: true,
+    remotePatterns: [{ protocol: 'https', hostname: '**' }]
   },
- 
-<<<<<<< HEAD
-  eslint: {
-    ignoreDuringBuilds: true,
-  },
-=======
->>>>>>> 9989abcf (fixes)
-}
-
-export default nextConfig
+  experimental: {
+    typedRoutes: true
+  }
+};
+export default nextConfig;
