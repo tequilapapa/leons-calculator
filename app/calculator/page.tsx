@@ -1,87 +1,116 @@
-'use client'
+'use client';
 
-import { useState, useEffect } from 'react'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Progress } from '@/components/ui/progress'
-import { ArrowRight, ArrowLeft, Camera, Check, Calendar, ExternalLink } from 'lucide-react'
-import { useRouter } from 'next/navigation'
+import { useEffect, useMemo, useState } from 'react';
+import { useRouter } from 'next/navigation';
+import { createClient } from '@/lib/supabase/client';
+import KitchenEstimator from '@/components/kitchen-estimator';
+import ReviewsWidget from '@/components/reviews-widget';
 
-type ProjectType = 'new-hardwood' | 'refinishing' | 'luxury-vinyl' | 'kitchen-remodel' | ''
-type QualityTier = 'economic' | 'standard' | 'premium' | ''
-type Urgency = 'asap' | '1-2-weeks' | '1-month' | 'browsing' | ''
+import { Button } from '@/components/ui/button';
+import { Card } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Progress } from '@/components/ui/progress';
+import {
+  Ruler,
+  Layers,
+  Hammer,
+  DollarSign,
+  ArrowRight,
+  ArrowLeft,
+  Scan,
+  Calendar,
+  Check,
+} from 'lucide-react';
+
+type ProjectType = 'new-hardwood' | 'refinishing' | 'luxury-vinyl' | 'kitchen-remodel' | '';
+type QualityTier = 'economic' | 'standard' | 'premium' | '';
+type Urgency = 'asap' | '1-2-weeks' | '1-month' | 'browsing' | '';
 
 type FormData = {
-  // Step 1: Project Type & Quality
-  projectType: ProjectType
-  qualityTier: QualityTier
+  projectType: ProjectType;
+  qualityTier: QualityTier;
 
-  // Step 2: Project-Specific (conditional)
-  // Refinishing specific
-  finishType: string
-  floorCondition: string
-  moveFurniture: string
+  // Refinishing
+  finishType: string;
+  floorCondition: string;
+  moveFurniture: string;
 
-  // New Install specific
-  woodSpecies: string
-  finishStyle: string
-  demoNeeded: string
+  // New install
+  woodSpecies: string;
+  finishStyle: string;
+  demoNeeded: string;
 
-  // Kitchen Remodel specific
-  cabinetsTop: string
-  cabinetsBottom: string
-  sinkPlumbing: string
-  lightingFixtures: string
-  countertops: string
-  backsplash: string
+  // Kitchen (legacy wizard – unused when mode='kitchen')
+  cabinetsTop: string;
+  cabinetsBottom: string;
+  sinkPlumbing: string;
+  lightingFixtures: string;
+  countertops: string;
+  backsplash: string;
 
-  // Step 3: Square Footage & Urgency
-  totalSqft: string
-  length: string
-  width: string
-  urgency: Urgency
+  // Size & urgency
+  totalSqft: string;
+  length: string;
+  width: string;
+  urgency: Urgency;
 
-  // Step 4: Contact Info
-  firstName: string
-  lastName: string
-  email: string
-  phone: string
-}
+  // Contact
+  firstName: string;
+  lastName: string;
+  email: string;
+  phone: string;
+};
+
+type WoodProfile = {
+  id: string;
+  sku?: string | null;
+  name: string;
+  image_url: string | null;
+  wood_type: string | null;
+  price_per_sqft: number | null;
+  glb_url?: string | null;
+  usdz_url?: string | null;
+  poster_url?: string | null;
+};
 
 const PROJECT_TYPES = [
   { id: 'new-hardwood' as ProjectType, name: 'New Hardwood Install', description: 'Professional installation of brand new hardwood flooring' },
   { id: 'refinishing' as ProjectType, name: 'Refinishing Hardwood', description: 'Restore and refinish your existing hardwood floors' },
   { id: 'luxury-vinyl' as ProjectType, name: 'Luxury Vinyl', description: 'Durable, waterproof luxury vinyl plank installation' },
-  { id: 'kitchen-remodel' as ProjectType, name: 'Kitchen Remodels', description: 'Complete kitchen renovation with flooring and more' }
-]
+  { id: 'kitchen-remodel' as ProjectType, name: 'Kitchen Remodels', description: 'Complete kitchen renovation with flooring and more' },
+];
 
 const QUALITY_TIERS = [
   { id: 'economic' as QualityTier, name: 'Economic', priceMultiplier: 0.8 },
   { id: 'standard' as QualityTier, name: 'Standard', priceMultiplier: 1.0 },
-  { id: 'premium' as QualityTier, name: 'Premium', priceMultiplier: 1.3 }
-]
+  { id: 'premium' as QualityTier, name: 'Premium', priceMultiplier: 1.3 },
+];
 
-// Map UI choices → real SKUs (adjust to your actual rows)
 const skuMap: Record<string, string> = {
-  // Vinyl looks
   'lvp-wood-look': 'LHF-A-047',
   'lvp-stone-look': 'LHF-STONE-001',
   'lvp-tile-look': 'LHF-TILE-001',
-  // Hardwood species
   oak: 'LHF-OAK-001',
   maple: 'LHF-MAPLE-001',
   walnut: 'LHF-WALNUT-001',
   cherry: 'LHF-CHERRY-001',
-  hickory: 'LHF-HICKORY-001'
-}
+  hickory: 'LHF-HICKORY-001',
+};
 
 export default function CalculatorPage() {
-  const router = useRouter()
-  const [currentStep, setCurrentStep] = useState(1)
-  const [isSubmitting, setIsSubmitting] = useState(false)
-  const [pricePulse, setPricePulse] = useState(false)
+  const router = useRouter();
+
+  // ===== MODE SWITCH (Flooring vs Kitchen) =====
+  const [mode, setMode] = useState<'flooring' | 'kitchen'>('flooring');
+
+  // ===== Flooring wizard state =====
+  const [currentStep, setCurrentStep] = useState(1);
+  const totalSteps = 5;
+  const progress = (currentStep / totalSteps) * 100;
+
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [pricePulse, setPricePulse] = useState(false);
 
   const [formData, setFormData] = useState<FormData>({
     projectType: '',
@@ -105,601 +134,606 @@ export default function CalculatorPage() {
     firstName: '',
     lastName: '',
     email: '',
-    phone: ''
-  })
+    phone: '',
+  });
 
-  const totalSteps = 5
-  const progress = (currentStep / totalSteps) * 100
+  const updateField = (field: keyof FormData, value: string) =>
+    setFormData((prev) => ({ ...prev, [field]: value }));
 
-  const updateField = (field: keyof FormData, value: string) => {
-    setFormData(prev => ({ ...prev, [field]: value }))
-  }
-
-  // Auto-calc sqft when L/W change
   useEffect(() => {
     if (formData.length && formData.width) {
-      const calculated = (parseFloat(formData.length) * parseFloat(formData.width)).toFixed(0)
-      setFormData(prev => ({ ...prev, totalSqft: calculated }))
+      const calc = (parseFloat(formData.length) * parseFloat(formData.width)).toFixed(0);
+      setFormData((prev) => ({ ...prev, totalSqft: calc }));
     }
-  }, [formData.length, formData.width])
+  }, [formData.length, formData.width]);
 
+  // Simple material price preview for the wizard (non-kitchen)
   const calculatePriceRange = () => {
-    if (!formData.totalSqft || !formData.projectType || !formData.qualityTier) return null
-    const sqft = parseFloat(formData.totalSqft)
-    let basePricePerSqft = 8.5
-
+    if (!formData.totalSqft || !formData.projectType || !formData.qualityTier) return null;
+    const sqft = parseFloat(formData.totalSqft);
+    let basePricePerSqft = 8.5;
     switch (formData.projectType) {
-      case 'new-hardwood': basePricePerSqft = 12.0; break
-      case 'refinishing': basePricePerSqft = 5.5; break
-      case 'luxury-vinyl': basePricePerSqft = 8.0; break
-      case 'kitchen-remodel': basePricePerSqft = 15.0; break
+      case 'new-hardwood': basePricePerSqft = 12.0; break;
+      case 'refinishing': basePricePerSqft = 5.5; break;
+      case 'luxury-vinyl': basePricePerSqft = 8.0; break;
+      case 'kitchen-remodel': basePricePerSqft = 15.0; break; // legacy; real kitchen calc is in KitchenEstimator
     }
+    const tierMultiplier = QUALITY_TIERS.find(t => t.id === formData.qualityTier)?.priceMultiplier || 1.0;
+    const adjusted = basePricePerSqft * tierMultiplier;
+    return {
+      min: (sqft * adjusted * 0.9).toFixed(0),
+      max: (sqft * adjusted * 1.1).toFixed(0),
+      avg: (sqft * adjusted).toFixed(0),
+    };
+  };
+  const priceRange = calculatePriceRange();
 
-    const tierMultiplier = QUALITY_TIERS.find(t => t.id === formData.qualityTier)?.priceMultiplier || 1.0
-    const adjustedPrice = basePricePerSqft * tierMultiplier
-
-    const minPrice = (sqft * adjustedPrice * 0.9).toFixed(0)
-    const maxPrice = (sqft * adjustedPrice * 1.1).toFixed(0)
-    return { min: minPrice, max: maxPrice, avg: (sqft * adjustedPrice).toFixed(0) }
-  }
-
-  const priceRange = calculatePriceRange()
-
-  // Price pulse effect
   useEffect(() => {
-    if (!priceRange) return
-    setPricePulse(true)
-    const t = setTimeout(() => setPricePulse(false), 700)
-    return () => clearTimeout(t)
-  }, [priceRange?.avg])
+    if (!priceRange) return;
+    setPricePulse(true);
+    const t = setTimeout(() => setPricePulse(false), 700);
+    return () => clearTimeout(t);
+  }, [priceRange?.avg]);
 
-  // Step validation (Vinyl no longer requires finishStyle)
+  // Products (Flooring mode)
+  const [profiles, setProfiles] = useState<WoodProfile[]>([]);
+  const [selected, setSelected] = useState<WoodProfile | null>(null);
+  const [material, setMaterial] = useState<'hardwood' | 'vinyl' | 'engineered' | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [err, setErr] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (mode !== 'flooring') return;
+    (async () => {
+      setLoading(true);
+      setErr(null);
+      try {
+        const supabase = createClient();
+        const { data, error } = await supabase
+          .from('wood_profiles')
+          .select('*')
+          .order('created_at', { ascending: false });
+        if (error) throw error;
+        setProfiles((data || []) as WoodProfile[]);
+      } catch (e: any) {
+        setErr(e?.message || 'Failed to load products');
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, [mode]);
+
+  const [length, setLength] = useState<number | ''>('');
+  const [width, setWidth] = useState<number | ''>('');
+  const sqft = useMemo(() => {
+    const L = typeof length === 'number' ? length : 0;
+    const W = typeof width === 'number' ? width : 0;
+    return L > 0 && W > 0 ? L * W : 0;
+  }, [length, width]);
+
+  const materialCopy = {
+    hardwood: { title: 'Solid Hardwood', blurb: 'Timeless, refinishable, premium feel.' },
+    vinyl: { title: 'Luxury Vinyl', blurb: 'Water-resistant, budget-friendly, durable.' },
+    engineered: { title: 'Engineered Wood', blurb: 'Real wood veneer, more stable than solid.' },
+  } as const;
+
+  const estMaterial = useMemo(() => {
+    const p = selected?.price_per_sqft || 0;
+    return sqft * p;
+  }, [sqft, selected?.price_per_sqft]);
+
   const canProceed = () => {
     switch (currentStep) {
       case 1:
-        return !!(formData.projectType && formData.qualityTier)
+        return !!(formData.projectType && formData.qualityTier);
       case 2:
-        if (formData.projectType === 'refinishing') {
-          return !!(formData.finishType && formData.floorCondition)
-        } else if (formData.projectType === 'new-hardwood') {
-          return !!(formData.woodSpecies && formData.finishStyle && formData.demoNeeded)
-        } else if (formData.projectType === 'luxury-vinyl') {
-          // vinyl: just need look + demo selection
-          return !!(formData.woodSpecies && formData.demoNeeded)
-        } else if (formData.projectType === 'kitchen-remodel') {
-          return !!(formData.cabinetsTop && formData.countertops)
-        }
-        return true
+        if (formData.projectType === 'refinishing') return !!(formData.finishType && formData.floorCondition);
+        if (formData.projectType === 'new-hardwood') return !!(formData.woodSpecies && formData.finishStyle && formData.demoNeeded);
+        if (formData.projectType === 'luxury-vinyl') return !!(formData.woodSpecies && formData.demoNeeded);
+        if (formData.projectType === 'kitchen-remodel') return !!(formData.cabinetsTop && formData.countertops);
+        return true;
       case 3:
-        return !!(formData.totalSqft && formData.urgency)
+        return !!(formData.totalSqft && formData.urgency);
       case 4:
-        return !!(formData.firstName && formData.lastName && formData.email && formData.phone)
+        return !!(formData.firstName && formData.lastName && formData.email && formData.phone);
       default:
-        return true
+        return true;
     }
-  }
+  };
 
   const handleNext = async () => {
-    if (currentStep >= totalSteps) return
-    setCurrentStep(currentStep + 1)
-    // Track progression
+    if (currentStep >= totalSteps) return;
+    setCurrentStep((s) => s + 1);
     try {
       await fetch('/api/tracking', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ event: 'calculator_step_complete', step: currentStep, data: formData })
-      })
+        body: JSON.stringify({ event: 'calculator_step_complete', step: currentStep, data: formData }),
+      });
     } catch {}
-  }
+  };
 
-  const handleBack = () => {
-    if (currentStep > 1) setCurrentStep(currentStep - 1)
-  }
+  const handleBack = () => setCurrentStep((s) => Math.max(1, s - 1));
 
-  const handleSubmit = async () => {
-    setIsSubmitting(true)
-    try {
-      const response = await fetch('/api/submit-lead', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...formData, priceRange, source: 'calculator' })
-      })
-      if (response.ok) {
-        setCurrentStep(5) // Success
-        try {
-          await fetch('/api/tracking', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ event: 'lead_submitted', data: { email: formData.email, projectType: formData.projectType } })
-          })
-        } catch {}
-      }
-    } catch (error) {
-      console.error('Submission error:', error)
-    } finally {
-      setIsSubmitting(false)
+const handleSubmit = async () => {
+  setIsSubmitting(true);
+  try {
+    const response = await fetch('/api/submit-lead', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ...formData, priceRange, source: 'calculator' }),
+    });
+
+    if (response.ok) {
+      // briefly show Step 5 "Thank you"
+      setCurrentStep(5);
+      try {
+        await fetch('/api/tracking', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            event: 'lead_submitted',
+            data: { email: formData.email, projectType: formData.projectType },
+          }),
+        });
+      } catch {}
+
+      // redirect after a short delay
+      setTimeout(() => {
+        window.location.href = 'https://www.leonshardwood.com/quote';
+        // or: router.push('https://www.leonshardwood.com/quote')
+      }, 1200);
     }
+  } catch (e) {
+    console.error('Submission error:', e);
+  } finally {
+    setIsSubmitting(false);
   }
+};
 
-  // Route to real camera page with inferred SKU
   const goToCamera = () => {
-    const pick = formData.woodSpecies?.trim()
-    const sku = (pick && skuMap[pick]) || 'LHF-A-047'
-    router.push(`/camera?sku=${encodeURIComponent(sku)}`)
-  }
+    const pick = formData.woodSpecies?.trim();
+    const sku = (pick && skuMap[pick]) || 'LHF-A-047';
+    router.push(`/camera?sku=${encodeURIComponent(sku)}`);
+  };
 
+  // ===== RENDER =====
   return (
     <div className="min-h-screen bg-gradient-to-b from-background to-muted py-12 px-4">
-      <div className="container mx-auto max-w-2xl">
-        {/* New: announcement hook */}
-        <div className="mb-4 rounded-lg border bg-primary/5 p-3 animate-in fade-in slide-in-from-top-2">
-          <span className="inline-flex items-center gap-2">
-            <span className="h-2 w-2 rounded-full bg-green-500 animate-pulse" />
-            <span className="font-semibold">New:</span> Try our AR visualizer — see floors in your room.
-          </span>
+      <div className="container mx-auto max-w-6xl">
+        {/* Mode switcher */}
+        <div className="mb-4 flex flex-wrap gap-2">
+          <button
+            onClick={() => setMode('flooring')}
+            className={`rounded-lg border px-3 py-2 text-sm transition ${
+              mode === 'flooring' ? 'border-primary bg-primary/10' : 'border-gray-300 hover:bg-gray-50'
+            }`}
+            aria-pressed={mode === 'flooring'}
+          >
+            Flooring
+          </button>
+          <button
+            onClick={() => setMode('kitchen')}
+            className={`rounded-lg border px-3 py-2 text-sm transition ${
+              mode === 'kitchen' ? 'border-primary bg-primary/10' : 'border-gray-300 hover:bg-gray-50'
+            }`}
+            aria-pressed={mode === 'kitchen'}
+          >
+            Kitchen Remodel
+          </button>
         </div>
 
-        {/* Progress Bar */}
-        <div className="mb-8">
-          <div className="flex justify-between items-center mb-2">
-            <span className="text-sm font-medium">Step {currentStep} of {totalSteps}</span>
-            <span className="text-sm text-muted-foreground">{progress.toFixed(0)}% Complete</span>
-          </div>
-          <Progress value={progress} className="h-2" />
-        </div>
+        {mode === 'kitchen' ? (
+          // ===== KITCHEN MODE (accurate estimator) =====
+          <KitchenEstimator />
+        ) : (
+          // ===== FLOORING MODE (your existing wizard) =====
+          <div className="grid gap-6 lg:grid-cols-3">
+            {/* LEFT: Wizard */}
+            <div className="lg:col-span-2">
+              {/* Announcement */}
+              <div className="mb-4 rounded-lg border bg-primary/5 p-3 animate-in fade-in slide-in-from-top-2">
+                <span className="inline-flex items-center gap-2">
+                  <span className="h-2 w-2 rounded-full bg-green-500 animate-pulse" />
+                  <span className="font-semibold">New:</span> Try our AR visualizer — see floors in your room.
+                </span>
+              </div>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>
-              {currentStep === 1 && 'Project Type & Quality'}
-              {currentStep === 2 && 'Project Details'}
-              {currentStep === 3 && 'Size & Timeline'}
-              {currentStep === 4 && 'Your Information'}
-              {currentStep === 5 && 'All Set!'}
-            </CardTitle>
-            <CardDescription>
-              {currentStep === 1 && 'What type of project are you planning?'}
-              {currentStep === 2 && 'Tell us more about your specific needs'}
-              {currentStep === 3 && 'Help us understand your space and timeline'}
-              {currentStep === 4 && 'Get your personalized quote'}
-              {currentStep === 5 && "We'll be in touch soon"}
-            </CardDescription>
-          </CardHeader>
+              {/* Progress */}
+              <div className="mb-8">
+                <div className="mb-2 flex items-center justify-between">
+                  <span className="text-sm font-medium">Step {currentStep} of {totalSteps}</span>
+                  <span className="text-sm text-muted-foreground">{progress.toFixed(0)}% Complete</span>
+                </div>
+                <Progress value={progress} className="h-2" />
+              </div>
 
-          <CardContent className="space-y-6">
-            {/* Step 1 */}
-            {currentStep === 1 && (
-              <div className="space-y-6">
-                <div>
-                  <Label className="text-base font-semibold mb-3 block">Select Project Type</Label>
-                  <div className="grid gap-3">
-                    {PROJECT_TYPES.map(project => (
-                      <button
-                        key={project.id}
-                        onClick={() => updateField('projectType', project.id)}
-                        className={`p-4 rounded-lg border-2 text-left transition-all hover:border-primary ${
-                          formData.projectType === project.id ? 'border-primary bg-primary/5' : 'border-border'
-                        }`}
-                      >
-                        <div className="font-semibold">{project.name}</div>
-                        <div className="text-sm text-muted-foreground mt-1">{project.description}</div>
-                      </button>
-                    ))}
+              <Card className="rounded-2xl border border-gray-200 bg-white/80 p-6 shadow-sm">
+                {/* Stepper bar */}
+                <div className="mb-6">
+                  <div className="relative h-2 w-full rounded-full bg-gray-200">
+                    <div
+                      className="absolute left-0 top-0 h-2 rounded-full bg-primary transition-all"
+                      style={{ width: `${((currentStep - 1) / (totalSteps - 1)) * 100}%` }}
+                    />
                   </div>
                 </div>
 
-                {formData.projectType && (
-                  <div>
-                    <Label className="text-base font-semibold mb-3 block">Quality Level</Label>
-                    <div className="grid grid-cols-3 gap-3">
-                      {QUALITY_TIERS.map(tier => (
-                        <button
-                          key={tier.id}
-                          onClick={() => updateField('qualityTier', tier.id)}
-                          className={`p-4 rounded-lg border-2 text-center transition-all hover:border-primary ${
-                            formData.qualityTier === tier.id ? 'border-primary bg-primary/5' : 'border-border'
-                          }`}
-                        >
-                          <div className="font-semibold">{tier.name}</div>
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* Step 2 */}
-            {currentStep === 2 && (
-              <div className="space-y-4">
-                {/* Refinishing */}
-                {formData.projectType === 'refinishing' && (
-                  <>
+                {/* STEP 1: Project & Quality */}
+                {currentStep === 1 && (
+                  <div className="space-y-6">
                     <div>
-                      <Label htmlFor="finishType">Finish Type</Label>
-                      <select id="finishType" className="w-full h-10 px-3 rounded-md border border-input bg-background"
-                        value={formData.finishType} onChange={e => updateField('finishType', e.target.value)}>
-                        <option value="">Select finish</option>
-                        <option value="natural">Natural Finish</option>
-                        <option value="stained-light">Stained - Light</option>
-                        <option value="stained-dark">Stained - Dark</option>
-                        <option value="stained-darker">Stained - Darker</option>
-                        <option value="whitewashed">Whitewashed</option>
-                        <option value="custom-match">Custom Match Stain</option>
-                      </select>
-                    </div>
-                    <div>
-                      <Label htmlFor="floorCondition">Floor Condition</Label>
-                      <select id="floorCondition" className="w-full h-10 px-3 rounded-md border border-input bg-background"
-                        value={formData.floorCondition} onChange={e => updateField('floorCondition', e.target.value)}>
-                        <option value="">Select condition</option>
-                        <option value="light-scratches">Light Scratches</option>
-                        <option value="moderate-wear">Moderate Wear</option>
-                        <option value="heavy-damage">Heavy Damage/Repairs Needed</option>
-                      </select>
-                    </div>
-                    <div>
-                      <Label htmlFor="moveFurniture">Move Furniture?</Label>
-                      <select id="moveFurniture" className="w-full h-10 px-3 rounded-md border border-input bg-background"
-                        value={formData.moveFurniture} onChange={e => updateField('moveFurniture', e.target.value)}>
-                        <option value="">Select option</option>
-                        <option value="yes-need-help">Yes, Need Help Moving</option>
-                        <option value="no-already-empty">No, Room is Empty</option>
-                        <option value="minimal-furniture">Minimal Furniture</option>
-                      </select>
-                    </div>
-                  </>
-                )}
-
-                {/* New Install (Hardwood/Vinyl) */}
-                {(formData.projectType === 'new-hardwood' || formData.projectType === 'luxury-vinyl') && (
-                  <>
-                    <div>
-                      <Label htmlFor="woodSpecies">Wood Species / Material</Label>
-                      <select id="woodSpecies" className="w-full h-10 px-3 rounded-md border border-input bg-background"
-                        value={formData.woodSpecies} onChange={e => updateField('woodSpecies', e.target.value)}>
-                        <option value="">Select type</option>
-                        {formData.projectType === 'new-hardwood' ? (
-                          <>
-                            <option value="oak">Oak</option>
-                            <option value="maple">Maple</option>
-                            <option value="walnut">Walnut</option>
-                            <option value="cherry">Cherry</option>
-                            <option value="hickory">Hickory</option>
-                          </>
-                        ) : (
-                          <>
-                            <option value="lvp-wood-look">LVP - Wood Look</option>
-                            <option value="lvp-stone-look">LVP - Stone Look</option>
-                            <option value="lvp-tile-look">LVP - Tile Look</option>
-                          </>
-                        )}
-                      </select>
+                      <Label className="mb-3 block text-base font-semibold">Select Project Type</Label>
+                      <div className="grid gap-3">
+                        {PROJECT_TYPES.map((p) => (
+                          <button
+                            key={p.id}
+                            onClick={() => updateField('projectType', p.id)}
+                            className={`rounded-lg border-2 p-4 text-left transition-all hover:border-primary ${
+                              formData.projectType === p.id ? 'border-primary bg-primary/5' : 'border-border'
+                            }`}
+                          >
+                            <div className="font-semibold">{p.name}</div>
+                            <div className="mt-1 text-sm text-muted-foreground">{p.description}</div>
+                          </button>
+                        ))}
+                      </div>
                     </div>
 
-                    {formData.projectType === 'new-hardwood' && (
+                    {formData.projectType && (
                       <div>
-                        <Label htmlFor="finishStyle">Finish Style</Label>
-                        <select id="finishStyle" className="w-full h-10 px-3 rounded-md border border-input bg-background"
-                          value={formData.finishStyle} onChange={e => updateField('finishStyle', e.target.value)}>
-                          <option value="">Select finish</option>
-                          <option value="prefinished">Prefinished</option>
-                          <option value="unfinished">Unfinished (site-finished)</option>
-                        </select>
+                        <Label className="mb-3 block text-base font-semibold">Quality Level</Label>
+                        <div className="grid grid-cols-3 gap-3">
+                          {QUALITY_TIERS.map((tier) => (
+                            <button
+                              key={tier.id}
+                              onClick={() => updateField('qualityTier', tier.id)}
+                              className={`rounded-lg border-2 p-4 text-center transition-all hover:border-primary ${
+                                formData.qualityTier === tier.id ? 'border-primary bg-primary/5' : 'border-border'
+                              }`}
+                            >
+                              <div className="font-semibold">{tier.name}</div>
+                            </button>
+                          ))}
+                        </div>
                       </div>
                     )}
-
-                    <div>
-                      <Label htmlFor="demoNeeded">Existing Floor Removal</Label>
-                      <select id="demoNeeded" className="w-full h-10 px-3 rounded-md border border-input bg-background"
-                        value={formData.demoNeeded} onChange={e => updateField('demoNeeded', e.target.value)}>
-                        <option value="">Select option</option>
-                        <option value="already-demo">Already Removed</option>
-                        <option value="include-demo">Include Demo/Removal</option>
-                        <option value="new-construction">New Construction</option>
-                      </select>
-                    </div>
-                  </>
+                  </div>
                 )}
 
-                {/* Kitchen Remodel */}
-                {formData.projectType === 'kitchen-remodel' && (
-                  <>
-                    <div>
-                      <Label htmlFor="cabinetsTop">Upper Cabinets</Label>
-                      <select id="cabinetsTop" className="w-full h-10 px-3 rounded-md border border-input bg-background"
-                        value={formData.cabinetsTop} onChange={e => updateField('cabinetsTop', e.target.value)}>
-                        <option value="">Select option</option>
-                        <option value="keep-existing">Keep Existing</option>
-                        <option value="refacing">Refacing</option>
-                        <option value="new-cabinets">New Cabinets</option>
-                      </select>
-                    </div>
-                    <div>
-                      <Label htmlFor="cabinetsBottom">Lower Cabinets</Label>
-                      <select id="cabinetsBottom" className="w-full h-10 px-3 rounded-md border border-input bg-background"
-                        value={formData.cabinetsBottom} onChange={e => updateField('cabinetsBottom', e.target.value)}>
-                        <option value="">Select option</option>
-                        <option value="keep-existing">Keep Existing</option>
-                        <option value="refacing">Refacing</option>
-                        <option value="new-cabinets">New Cabinets</option>
-                      </select>
-                    </div>
-                    <div>
-                      <Label htmlFor="countertops">Countertops</Label>
-                      <select id="countertops" className="w-full h-10 px-3 rounded-md border border-input bg-background"
-                        value={formData.countertops} onChange={e => updateField('countertops', e.target.value)}>
-                        <option value="">Select material</option>
-                        <option value="granite">Granite</option>
-                        <option value="quartz">Quartz</option>
-                        <option value="marble">Marble</option>
-                        <option value="laminate">Laminate</option>
-                      </select>
-                    </div>
-                    <div>
-                      <Label htmlFor="backsplash">Backsplash</Label>
-                      <select id="backsplash" className="w-full h-10 px-3 rounded-md border border-input bg-background"
-                        value={formData.backsplash} onChange={e => updateField('backsplash', e.target.value)}>
-                        <option value="">Select option</option>
-                        <option value="tile">Tile</option>
-                        <option value="glass">Glass</option>
-                        <option value="stone">Stone</option>
-                        <option value="none">None</option>
-                      </select>
-                    </div>
-                    <div>
-                      <Label htmlFor="sinkPlumbing">Sink & Plumbing Updates</Label>
-                      <select id="sinkPlumbing" className="w-full h-10 px-3 rounded-md border border-input bg-background"
-                        value={formData.sinkPlumbing} onChange={e => updateField('sinkPlumbing', e.target.value)}>
-                        <option value="">Select option</option>
-                        <option value="keep-existing">Keep Existing</option>
-                        <option value="new-sink">New Sink</option>
-                        <option value="full-plumbing">Full Plumbing Update</option>
-                      </select>
-                    </div>
-                    <div>
-                      <Label htmlFor="lightingFixtures">Lighting Fixtures</Label>
-                      <select id="lightingFixtures" className="w-full h-10 px-3 rounded-md border border-input bg-background"
-                        value={formData.lightingFixtures} onChange={e => updateField('lightingFixtures', e.target.value)}>
-                        <option value="">Select option</option>
-                        <option value="keep-existing">Keep Existing</option>
-                        <option value="update-fixtures">Update Fixtures</option>
-                        <option value="recessed-lighting">Add Recessed Lighting</option>
-                      </select>
-                    </div>
-                  </>
+                {/* STEP 2: Details */}
+                {currentStep === 2 && (
+                  <div className="space-y-4">
+                    {/* Refinishing */}
+                    {formData.projectType === 'refinishing' && (
+                      <>
+                        <SelectBlock
+                          id="finishType"
+                          label="Finish Type"
+                          value={formData.finishType}
+                          onChange={(v) => updateField('finishType', v)}
+                          options={[
+                            ['natural', 'Natural Finish'],
+                            ['stained-light', 'Stained - Light'],
+                            ['stained-dark', 'Stained - Dark'],
+                            ['stained-darker', 'Stained - Darker'],
+                            ['whitewashed', 'Whitewashed'],
+                            ['custom-match', 'Custom Match Stain'],
+                          ]}
+                        />
+                        <SelectBlock
+                          id="floorCondition"
+                          label="Floor Condition"
+                          value={formData.floorCondition}
+                          onChange={(v) => updateField('floorCondition', v)}
+                          options={[
+                            ['light-scratches', 'Light Scratches'],
+                            ['moderate-wear', 'Moderate Wear'],
+                            ['heavy-damage', 'Heavy Damage/Repairs Needed'],
+                          ]}
+                        />
+                        <SelectBlock
+                          id="moveFurniture"
+                          label="Move Furniture?"
+                          value={formData.moveFurniture}
+                          onChange={(v) => updateField('moveFurniture', v)}
+                          options={[
+                            ['yes-need-help', 'Yes, Need Help Moving'],
+                            ['no-already-empty', 'No, Room is Empty'],
+                            ['minimal-furniture', 'Minimal Furniture'],
+                          ]}
+                        />
+                      </>
+                    )}
+
+                    {/* New Install (Hardwood/Vinyl) */}
+                    {(formData.projectType === 'new-hardwood' || formData.projectType === 'luxury-vinyl') && (
+                      <>
+                        <SelectBlock
+                          id="woodSpecies"
+                          label="Wood Species / Material"
+                          value={formData.woodSpecies}
+                          onChange={(v) => updateField('woodSpecies', v)}
+                          options={
+                            formData.projectType === 'new-hardwood'
+                              ? [
+                                  ['oak', 'Oak'],
+                                  ['maple', 'Maple'],
+                                  ['walnut', 'Walnut'],
+                                  ['cherry', 'Cherry'],
+                                  ['hickory', 'Hickory'],
+                                ]
+                              : [
+                                  ['lvp-wood-look', 'LVP - Wood Look'],
+                                  ['lvp-stone-look', 'LVP - Stone Look'],
+                                  ['lvp-tile-look', 'LVP - Tile Look'],
+                                ]
+                          }
+                        />
+
+                        {formData.projectType === 'new-hardwood' && (
+                          <SelectBlock
+                            id="finishStyle"
+                            label="Finish Style"
+                            value={formData.finishStyle}
+                            onChange={(v) => updateField('finishStyle', v)}
+                            options={[
+                              ['prefinished', 'Prefinished'],
+                              ['unfinished', 'Unfinished (site-finished)'],
+                            ]}
+                          />
+                        )}
+
+                        <SelectBlock
+                          id="demoNeeded"
+                          label="Existing Floor Removal"
+                          value={formData.demoNeeded}
+                          onChange={(v) => updateField('demoNeeded', v)}
+                          options={[
+                            ['already-demo', 'Already Removed'],
+                            ['include-demo', 'Include Demo/Removal'],
+                            ['new-construction', 'New Construction'],
+                          ]}
+                        />
+                      </>
+                    )}
+
+                    {/* (Legacy) Kitchen fields – real pricing is in KitchenEstimator mode */}
+                    {formData.projectType === 'kitchen-remodel' && (
+                      <>
+                        <SelectBlock id="cabinetsTop" label="Upper Cabinets" value={formData.cabinetsTop} onChange={(v) => updateField('cabinetsTop', v)}
+                          options={[['keep-existing','Keep Existing'],['refacing','Refacing'],['new-cabinets','New Cabinets']]} />
+                        <SelectBlock id="cabinetsBottom" label="Lower Cabinets" value={formData.cabinetsBottom} onChange={(v) => updateField('cabinetsBottom', v)}
+                          options={[['keep-existing','Keep Existing'],['refacing','Refacing'],['new-cabinets','New Cabinets']]} />
+                        <SelectBlock id="countertops" label="Countertops" value={formData.countertops} onChange={(v) => updateField('countertops', v)}
+                          options={[['granite','Granite'],['quartz','Quartz'],['marble','Marble'],['laminate','Laminate']]} />
+                        <SelectBlock id="backsplash" label="Backsplash" value={formData.backsplash} onChange={(v) => updateField('backsplash', v)}
+                          options={[['tile','Tile'],['glass','Glass'],['stone','Stone'],['none','None']]} />
+                        <SelectBlock id="sinkPlumbing" label="Sink & Plumbing" value={formData.sinkPlumbing} onChange={(v) => updateField('sinkPlumbing', v)}
+                          options={[['keep-existing','Keep Existing'],['new-sink','New Sink'],['full-plumbing','Full Plumbing Update']]} />
+                        <SelectBlock id="lightingFixtures" label="Lighting" value={formData.lightingFixtures} onChange={(v) => updateField('lightingFixtures', v)}
+                          options={[['keep-existing','Keep Existing'],['update-fixtures','Update Fixtures'],['recessed-lighting','Add Recessed Lighting']]} />
+                      </>
+                    )}
+                  </div>
                 )}
-              </div>
-            )}
 
-            {/* Step 3 */}
-            {currentStep === 3 && (
-              <div className="space-y-4">
-                <div>
-                  <Label className="text-base font-semibold mb-3 block">Project Size</Label>
-                  <div className="grid grid-cols-2 gap-4 mb-3">
-                    <div>
-                      <Label htmlFor="length" className="text-sm">Length (feet)</Label>
-                      <Input id="length" type="number" placeholder="20" value={formData.length}
-                        onChange={e => updateField('length', e.target.value)} />
+                {/* STEP 3: Size & timeline */}
+                {currentStep === 3 && (
+                  <div className="space-y-4">
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <Label htmlFor="length" className="text-sm">Length (feet)</Label>
+                        <Input id="length" type="number" placeholder="20" value={formData.length}
+                          onChange={(e) => updateField('length', e.target.value)} />
+                      </div>
+                      <div>
+                        <Label htmlFor="width" className="text-sm">Width (feet)</Label>
+                        <Input id="width" type="number" placeholder="15" value={formData.width}
+                          onChange={(e) => updateField('width', e.target.value)} />
+                      </div>
                     </div>
                     <div>
-                      <Label htmlFor="width" className="text-sm">Width (feet)</Label>
-                      <Input id="width" type="number" placeholder="15" value={formData.width}
-                        onChange={e => updateField('width', e.target.value)} />
+                      <Label htmlFor="totalSqft" className="text-sm">Total Square Feet (editable)</Label>
+                      <Input id="totalSqft" type="number" placeholder="300" value={formData.totalSqft}
+                        onChange={(e) => updateField('totalSqft', e.target.value)} />
+                      <p className="mt-1 text-xs text-muted-foreground">Auto-calculated from L × W, but you can edit</p>
                     </div>
-                  </div>
-                  <div>
-                    <Label htmlFor="totalSqft" className="text-sm">Total Square Feet (editable)</Label>
-                    <Input id="totalSqft" type="number" placeholder="300" value={formData.totalSqft}
-                      onChange={e => updateField('totalSqft', e.target.value)} />
-                    <p className="text-xs text-muted-foreground mt-1">Auto-calculated from L × W, but you can edit it</p>
-                  </div>
-                </div>
 
-                <div>
-                  <Label className="text-base font-semibold mb-3 block">Project Timeline</Label>
-                  <div className="grid gap-3">
-                    <button onClick={() => updateField('urgency', 'asap')}
-                      className={`p-3 rounded-lg border-2 text-left transition-all hover:border-primary ${formData.urgency === 'asap' ? 'border-primary bg-primary/5' : 'border-border'}`}>
-                      <div className="font-semibold">ASAP</div>
-                      <div className="text-sm text-muted-foreground">Ready to start immediately</div>
-                    </button>
-                    <button onClick={() => updateField('urgency', '1-2-weeks')}
-                      className={`p-3 rounded-lg border-2 text-left transition-all hover:border-primary ${formData.urgency === '1-2-weeks' ? 'border-primary bg-primary/5' : 'border-border'}`}>
-                      <div className="font-semibold">1-2 Weeks</div>
-                      <div className="text-sm text-muted-foreground">Planning to start soon</div>
-                    </button>
-                    <button onClick={() => updateField('urgency', '1-month')}
-                      className={`p-3 rounded-lg border-2 text-left transition-all hover:border-primary ${formData.urgency === '1-month' ? 'border-primary bg-primary/5' : 'border-border'}`}>
-                      <div className="font-semibold">Within a Month</div>
-                      <div className="text-sm text-muted-foreground">Still in planning phase</div>
-                    </button>
-                    <button onClick={() => updateField('urgency', 'browsing')}
-                      className={`p-3 rounded-lg border-2 text-left transition-all hover:border-primary ${formData.urgency === 'browsing' ? 'border-primary bg-primary/5' : 'border-border'}`}>
-                      <div className="font-semibold">Just Browsing</div>
-                      <div className="text-sm text-muted-foreground">Gathering information</div>
-                    </button>
+                    {priceRange && (
+                      <div className={`rounded-lg border-2 border-primary/20 bg-gradient-to-br from-primary/10 to-primary/5 p-6 ${pricePulse ? 'animate-pulse' : ''}`}>
+                        <p className="mb-2 text-sm font-medium text-muted-foreground">Your Estimated Price Range</p>
+                        <p className="mb-1 text-3xl font-bold">${priceRange.min} - ${priceRange.max}</p>
+                        <p className="text-sm text-muted-foreground">Average: ${priceRange.avg} • Based on {formData.totalSqft} sq ft</p>
+                      </div>
+                    )}
                   </div>
-                </div>
+                )}
 
-                {/* Live Price Range with pulse */}
-                {priceRange && (
-                  <div className={`p-6 bg-gradient-to-br from-primary/10 to-primary/5 rounded-lg border-2 border-primary/20 ${pricePulse ? 'animate-pulse' : ''}`}>
-                    <p className="text-sm font-medium text-muted-foreground mb-2">Your Estimated Price Range</p>
-                    <p className="text-3xl font-bold mb-1">${priceRange.min} - ${priceRange.max}</p>
-                    <p className="text-sm text-muted-foreground">
-                      Average: ${priceRange.avg} • Based on {formData.totalSqft} sq ft
-                    </p>
-                    <div className="mt-3 pt-3 border-t border-primary/20">
-                      <p className="text-xs text-muted-foreground">
-                        {formData.projectType === 'refinishing' && 'Refinishing project'}
-                        {formData.projectType === 'new-hardwood' && 'New hardwood installation'}
-                        {formData.projectType === 'luxury-vinyl' && 'Luxury vinyl installation'}
-                        {formData.projectType === 'kitchen-remodel' && 'Kitchen remodel project'}
-                        {' • '}
-                        {formData.qualityTier === 'economic' && 'Economic quality'}
-                        {formData.qualityTier === 'standard' && 'Standard quality'}
-                        {formData.qualityTier === 'premium' && 'Premium quality'}
+                {/* STEP 4: Contact */}
+                {currentStep === 4 && (
+                  <div className="space-y-4">
+                    <div className="grid grid-cols-2 gap-4">
+                      <TextField id="firstName" label="First Name" value={formData.firstName} onChange={(v) => updateField('firstName', v)} />
+                      <TextField id="lastName" label="Last Name" value={formData.lastName} onChange={(v) => updateField('lastName', v)} />
+                    </div>
+                    <TextField id="email" label="Email" type="email" value={formData.email} onChange={(v) => updateField('email', v)} />
+                    <TextField id="phone" label="Phone Number" type="tel" value={formData.phone} onChange={(v) => updateField('phone', v)} />
+                  </div>
+                )}
+
+                {/* STEP 5: Success */}
+                {currentStep === 5 && (
+                  <div className="space-y-6 py-8 text-center">
+                    <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-green-100">
+                      <Check className="h-8 w-8 text-green-600" />
+                    </div>
+                    <div>
+                      <h3 className="mb-2 text-2xl font-bold">Thank You, {formData.firstName}!</h3>
+                      <p className="text-muted-foreground">
+                        We've received your information and will contact you shortly with a detailed quote.
                       </p>
                     </div>
-                  </div>
-                )}
-              </div>
-            )}
 
-            {/* Step 4 */}
-            {currentStep === 4 && (
-              <div className="space-y-4">
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <Label htmlFor="firstName">First Name</Label>
-                    <Input id="firstName" placeholder="John" value={formData.firstName}
-                      onChange={e => updateField('firstName', e.target.value)} />
-                  </div>
-                  <div>
-                    <Label htmlFor="lastName">Last Name</Label>
-                    <Input id="lastName" placeholder="Doe" value={formData.lastName}
-                      onChange={e => updateField('lastName', e.target.value)} />
-                  </div>
-                </div>
-                <div>
-                  <Label htmlFor="email">Email</Label>
-                  <Input id="email" type="email" placeholder="john@example.com" value={formData.email}
-                    onChange={e => updateField('email', e.target.value)} />
-                </div>
-                <div>
-                  <Label htmlFor="phone">Phone Number</Label>
-                  <Input id="phone" type="tel" placeholder="(555) 123-4567" value={formData.phone}
-                    onChange={e => updateField('phone', e.target.value)} />
-                </div>
+                    <div className="mx-auto max-w-md">
+                      <ReviewsWidget variant="inline" title="Customers love Leon’s" />
+                    </div>
 
-                {/* Quote Summary */}
-                {priceRange && (
-                  <div className="p-6 bg-muted rounded-lg space-y-3">
-                    <p className="font-semibold text-lg">Your Quote Summary</p>
-                    <div className="text-sm space-y-2">
-                      <div className="flex justify-between">
-                        <span className="text-muted-foreground">Project:</span>
-                        <span className="font-medium">
-                          {PROJECT_TYPES.find(p => p.id === formData.projectType)?.name}
-                        </span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-muted-foreground">Quality:</span>
-                        <span className="font-medium capitalize">{formData.qualityTier}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-muted-foreground">Size:</span>
-                        <span className="font-medium">{formData.totalSqft} sq ft</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-muted-foreground">Timeline:</span>
-                        <span className="font-medium capitalize">{formData.urgency.replace('-', ' ')}</span>
-                      </div>
-                      <div className="pt-3 mt-3 border-t border-border flex justify-between items-center">
-                        <span className="text-muted-foreground">Estimated Price:</span>
-                        <span className="text-xl font-bold text-primary">
-                          ${priceRange.min} - ${priceRange.max}
-                        </span>
-                      </div>
+                    <div className="space-y-3 pt-4">
+                      <Button onClick={goToCamera} size="lg" className="w-full">
+                        <Scan className="mr-2 h-5 w-5" />
+                        Try AR Visualizer
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="lg"
+                        className="w-full bg-transparent"
+                        onClick={() =>
+                          window.open(
+                            'https://www.leonshardwood.com/booking-calendar/flooring-consultation?referral=service_list_widget',
+                            '_blank'
+                          )
+                        }
+                      >
+                        <Calendar className="mr-2 h-5 w-5" />
+                        Book Free Consultation
+                      </Button>
                     </div>
                   </div>
                 )}
-              </div>
-            )}
 
-            {/* Step 5: Success */}
-            {currentStep === 5 && (
-              <div className="text-center space-y-6 py-8">
-                <div className="mx-auto w-16 h-16 bg-green-100 rounded-full flex items-center justify-center">
-                  <Check className="w-8 h-8 text-green-600" />
+                {/* Nav buttons */}
+                {currentStep < 5 && (
+                  <div className="flex justify-between pt-6">
+                    <Button variant="outline" onClick={handleBack} disabled={currentStep === 1}>
+                      <ArrowLeft className="mr-2 h-4 w-4" />
+                      Back
+                    </Button>
+                    {currentStep < 4 ? (
+                      <Button onClick={handleNext} disabled={!canProceed()}>
+                        Next
+                        <ArrowRight className="ml-2 h-4 w-4" />
+                      </Button>
+                    ) : (
+                      <Button onClick={handleSubmit} disabled={!canProceed() || isSubmitting}>
+                        {isSubmitting ? 'Submitting...' : 'Get My Quote'}
+                      </Button>
+                    )}
+                  </div>
+                )}
+              </Card>
+            </div>
+
+            {/* RIGHT: Sticky summary + Reviews */}
+            <div className="space-y-4">
+              <Card className="sticky top-20 rounded-2xl border border-gray-200 bg-white/80 p-4 shadow-sm">
+                <div className="mb-3 flex items-center justify-between">
+                  <p className="text-sm text-gray-600">Progress</p>
+                  <p className="text-sm text-gray-600">{currentStep} / {totalSteps}</p>
                 </div>
-                <div>
-                  <h3 className="text-2xl font-bold mb-2">Thank You, {formData.firstName}!</h3>
-                  <p className="text-muted-foreground">
-                    We've received your information and will contact you shortly with a detailed quote.
-                  </p>
-                  {priceRange && (
-                    <div className="mt-4 p-4 bg-muted rounded-lg inline-block">
-                      <p className="text-sm text-muted-foreground">Your estimated range</p>
-                      <p className="text-2xl font-bold">${priceRange.min} - ${priceRange.max}</p>
-                    </div>
-                  )}
+                <div className="mb-4 h-2 w-full rounded-full bg-gray-200">
+                  <div
+                    className="h-2 rounded-full bg-primary transition-all"
+                    style={{ width: `${((currentStep - 1) / (totalSteps - 1)) * 100}%` }}
+                  />
                 </div>
 
-                <div className="pt-6 space-y-3">
-                  {/* Route to actual camera app */}
-                  <Button onClick={goToCamera} size="lg" className="w-full">
-                    <Camera className="mr-2 h-5 w-5" />
-                    Try AR Visualizer with Your Options
-                  </Button>
+                {/* Quick summary */}
+                <div className="mt-2 space-y-2 text-sm text-gray-700">
+                  <div className="flex justify-between">
+                    <span>Project</span>
+                    <span className="font-medium">
+                      {PROJECT_TYPES.find((p) => p.id === formData.projectType)?.name || '—'}
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Quality</span>
+                    <span className="font-medium capitalize">{formData.qualityTier || '—'}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Size</span>
+                    <span className="font-medium">{formData.totalSqft ? `${formData.totalSqft} sq ft` : '—'}</span>
+                  </div>
+                </div>
 
+                <div className="mt-4 grid gap-2 sm:grid-cols-2">
                   <Button
-                    variant="outline"
-                    size="lg"
-                    className="w-full bg-transparent"
-                    onClick={() =>
-                      window.open(
-                        'https://www.leonshardwood.com/booking-calendar/flooring-consultation?referral=service_list_widget',
-                        '_blank'
-                      )
-                    }
+                    onClick={goToCamera}
+                    className="bg-primary text-primary-foreground hover:opacity-90"
                   >
-                    <Calendar className="mr-2 h-5 w-5" />
-                    Book Free Consultation
-                    <ExternalLink className="ml-2 h-4 w-4" />
+                    <Scan className="mr-2 h-4 w-4" />
+                    View in AR
                   </Button>
-
-                  <p className="text-sm text-muted-foreground pt-2">
-                    Schedule an in-home consultation to see samples and get exact pricing
-                  </p>
+                  <Button
+                    onClick={() => router.push('https://www.leonshardwood.com/quote')}
+                    variant="outline"
+                    className="border-gray-300 text-gray-900 hover:bg-gray-50"
+                  >
+                    <Calendar className="mr-2 h-4 w-4" />
+                    Book
+                  </Button>
                 </div>
-              </div>
-            )}
+              </Card>
 
-            {/* Navigation Buttons */}
-            {currentStep < 5 && (
-              <div className="flex justify-between pt-6">
-                <Button variant="outline" onClick={handleBack} disabled={currentStep === 1}>
-                  <ArrowLeft className="mr-2 h-4 w-4" />
-                  Back
-                </Button>
-
-                {currentStep < 4 ? (
-                  <Button onClick={handleNext} disabled={!canProceed()}>
-                    Next
-                    <ArrowRight className="ml-2 h-4 w-4" />
-                  </Button>
-                ) : (
-                  <Button onClick={handleSubmit} disabled={!canProceed() || isSubmitting}>
-                    {isSubmitting ? 'Submitting...' : 'Get My Quote'}
-                  </Button>
-                )}
-              </div>
-            )}
-          </CardContent>
-        </Card>
+              <ReviewsWidget variant="inline" title="Customers love Leon’s" />
+            </div>
+          </div>
+        )}
       </div>
-
-      {/* Sticky action bar to keep CTAs visible */}
-      {currentStep < 5 && (
-        <div className="fixed inset-x-0 bottom-3 z-40 mx-auto w-[min(720px,95%)] rounded-xl border bg-background/95 shadow-lg backdrop-blur supports-[backdrop-filter]:bg-background/60 p-3 flex gap-2">
-          <Button onClick={goToCamera} className="flex-1">
-            <Camera className="mr-2 h-5 w-5" />
-            View in AR
-          </Button>
-          {currentStep < 4 ? (
-            <Button onClick={handleNext} disabled={!canProceed()} className="w-36">
-              Next <ArrowRight className="ml-2 h-4 w-4" />
-            </Button>
-          ) : (
-            <Button onClick={handleSubmit} disabled={!canProceed() || isSubmitting} className="w-36">
-              {isSubmitting ? 'Submitting…' : 'Get Quote'}
-            </Button>
-          )}
-        </div>
-      )}
     </div>
-  )
+  );
+}
+
+/* ---------- Small field helpers ---------- */
+
+function SelectBlock({
+  id,
+  label,
+  value,
+  onChange,
+  options,
+}: {
+  id: string;
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  options: [string, string][];
+}) {
+  return (
+    <div>
+      <Label htmlFor={id}>{label}</Label>
+      <select
+        id={id}
+        className="h-10 w-full rounded-md border border-input bg-background px-3"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+      >
+        <option value="">Select…</option>
+        {options.map(([v, t]) => (
+          <option key={v} value={v}>{t}</option>
+        ))}
+      </select>
+    </div>
+  );
+}
+
+function TextField({
+  id,
+  label,
+  type = 'text',
+  value,
+  onChange,
+}: {
+  id: string;
+  label: string;
+  type?: string;
+  value: string;
+  onChange: (v: string) => void;
+}) {
+  return (
+    <div>
+      <Label htmlFor={id}>{label}</Label>
+      <Input id={id} type={type} value={value} onChange={(e) => onChange(e.target.value)} />
+    </div>
+  );
 }

@@ -1,11 +1,8 @@
+// next.config.mjs
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  reactStrictMode: true,
-  images: {
-    remotePatterns: [{ protocol: 'https', hostname: '**' }]
-  },
-  experimental: {
-    typedRoutes: true
-  }
+  typedRoutes: true,
+  images: { remotePatterns: [{ protocol: 'https', hostname: '**' }] },
 };
+
 export default nextConfig;
