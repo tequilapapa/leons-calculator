@@ -1,16 +1,26 @@
-/// <reference path="../../types/model-viewer.d.ts" />
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import Script from 'next/script';
 import { useSearchParams } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';  // <- fixed
+import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Ruler, DollarSign, ChevronRight, X, Check, Scan } from 'lucide-react';
+
+// ensure this page is always dynamic (avoids static export errors)
+export const dynamic = 'force-dynamic';
+
+export default function CameraPage() {
+  return (
+    <Suspense fallback={<div className="min-h-[50vh] grid place-items-center text-slate-300">Loading…</div>}>
+      <ARPageInner />
+    </Suspense>
+  );
+}
 
 interface WoodProfile {
   id: string;
@@ -35,7 +45,8 @@ interface LeadFormData {
   notes: string;
 }
 
-export default function ARVisualizerPage() {
+function ARPageInner() {
+  // ✅ useSearchParams is now inside a Suspense boundary
   const params = useSearchParams();
   const urlSku = params?.get('sku') ?? undefined;
 
@@ -59,7 +70,7 @@ export default function ARVisualizerPage() {
   // <model-viewer> ref to call activateAR()
   const mvRef = useRef<any>(null);
 
-  // Load profiles and preselect by ?sku=
+  // Load profiles from Supabase and preselect by ?sku=
   useEffect(() => {
     (async () => {
       setLoading(true);
@@ -75,13 +86,16 @@ export default function ARVisualizerPage() {
         const items = (data || []) as unknown as WoodProfile[];
         setWoodProfiles(items);
 
+        // Preselect by SKU (or first with AR assets)
         let pick: WoodProfile | undefined;
         if (urlSku) {
           pick = items.find(
             (p) => (p.sku || '').toLowerCase() === urlSku.toLowerCase() || p.id === urlSku
           );
         }
-        if (!pick) pick = items.find((p) => p.glb_url || p.usdz_url) || items[0];
+        if (!pick) {
+          pick = items.find((p) => p.glb_url || p.usdz_url) || items[0];
+        }
         setSelectedWood(pick || null);
       } catch (e: any) {
         setErr(e?.message || 'Failed to load wood profiles');
@@ -102,7 +116,7 @@ export default function ARVisualizerPage() {
 
   const hasIosUsdz = useMemo(() => Boolean(selectedWood?.usdz_url), [selectedWood]);
 
-  // Open native AR
+  // Explicit AR launch (makes it obvious)
   const openAR = () => {
     if (!selectedWood) return;
 
@@ -110,7 +124,6 @@ export default function ARVisualizerPage() {
       mvRef.current.activateAR();
       return;
     }
-
     const isIOS = /iPad|iPhone|iPod/i.test(navigator.userAgent);
     if (isIOS && selectedWood.usdz_url) {
       window.location.href = selectedWood.usdz_url;
@@ -125,7 +138,6 @@ export default function ARVisualizerPage() {
     }
   };
 
-  // Submit lead (do NOT call wood-profiles API here)
   const handleSubmitLead = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
@@ -201,9 +213,7 @@ export default function ARVisualizerPage() {
         <Card className="mb-6 overflow-hidden border-slate-800 bg-slate-900">
           <div className="relative aspect-video w-full bg-slate-950">
             {loading && <div className="flex h-full items-center justify-center text-slate-300">Loading models…</div>}
-
             {!loading && err && <div className="flex h-full items-center justify-center text-red-300">{err}</div>}
-
             {!loading && !err && !selectedWood && (
               <div className="flex h-full items-center justify-center">
                 <div className="text-slate-300">No profiles yet. Add one in Supabase.</div>
