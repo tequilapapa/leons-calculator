@@ -1,17 +1,19 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import Script from 'next/script';
+import { useSearchParams } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { Camera, Ruler, DollarSign, ChevronRight, X, Check } from 'lucide-react';
+import { Camera, Ruler, DollarSign, ChevronRight, X, Check, Scan } from 'lucide-react';
 
 interface WoodProfile {
   id: string;
+  sku?: string | null;
   name: string;
   description: string;
   image_url: string;
@@ -19,7 +21,6 @@ interface WoodProfile {
   color: string;
   wood_type: string;
   finish: string;
-  // NEW: add these in DB (see section C)
   glb_url?: string | null;
   usdz_url?: string | null;
   poster_url?: string | null;
@@ -34,10 +35,17 @@ interface LeadFormData {
 }
 
 export default function ARVisualizerPage() {
+  const params = useSearchParams();
+  const urlSku = params.get('sku') ?? undefined;
+
   const [woodProfiles, setWoodProfiles] = useState<WoodProfile[]>([]);
   const [selectedWood, setSelectedWood] = useState<WoodProfile | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [err, setErr] = useState<string | null>(null);
+
   const [measurements, setMeasurements] = useState({ length: 0, width: 0, sqft: 0 });
   const [estimatedPrice, setEstimatedPrice] = useState(0);
+
   const [showLeadForm, setShowLeadForm] = useState(false);
   const [leadFormData, setLeadFormData] = useState<LeadFormData>({
     name: '',
@@ -47,26 +55,74 @@ export default function ARVisualizerPage() {
     notes: '',
   });
 
-  useEffect(() => {
-    loadWoodProfiles();
-  }, []);
+  // <model-viewer> ref to call activateAR()
+  const mvRef = useRef<any>(null);
 
+  // Load profiles from Supabase and preselect by ?sku=
+  useEffect(() => {
+    (async () => {
+      setLoading(true);
+      setErr(null);
+      try {
+        const supabase = createClient();
+        const { data, error } = await supabase
+          .from('wood_profiles')
+          .select('*')
+          .order('created_at', { ascending: false });
+
+        if (error) throw error;
+        const items = (data || []) as unknown as WoodProfile[];
+        setWoodProfiles(items);
+
+        // Preselect by SKU (or first with AR assets)
+        let pick: WoodProfile | undefined;
+        if (urlSku) {
+          pick = items.find(p => (p.sku || '').toLowerCase() === urlSku.toLowerCase() || p.id === urlSku);
+        }
+        if (!pick) {
+          pick = items.find(p => p.glb_url || p.usdz_url) || items[0];
+        }
+        setSelectedWood(pick || null);
+      } catch (e: any) {
+        setErr(e?.message || 'Failed to load wood profiles');
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, [urlSku]);
+
+  // Recompute sqft/price
   useEffect(() => {
     if (measurements.length && measurements.width) {
       const sqft = measurements.length * measurements.width;
-      setMeasurements((prev) => ({ ...prev, sqft }));
-      if (selectedWood) setEstimatedPrice(sqft * selectedWood.price_per_sqft);
+      setMeasurements(prev => ({ ...prev, sqft }));
+      if (selectedWood) setEstimatedPrice(sqft * (selectedWood.price_per_sqft || 0));
     }
   }, [measurements.length, measurements.width, selectedWood]);
 
-  const loadWoodProfiles = async () => {
-    const supabase = createClient();
-    const { data, error } = await supabase
-      .from('wood_profiles')
-      .select('*')
-      .order('created_at', { ascending: false });
+  // iOS Quick Look only if we actually have a USDZ
+  const hasIosUsdz = useMemo(() => Boolean(selectedWood?.usdz_url), [selectedWood]);
 
-    if (data && !error) setWoodProfiles(data as unknown as WoodProfile[]);
+  // Explicit AR launch (makes it obvious)
+  const openAR = () => {
+    // If model-viewer supports it, use the native trigger
+    if (mvRef.current?.activateAR) {
+      mvRef.current.activateAR();
+      return;
+    }
+    // Manual fallback (rare)
+    const isIOS = /iPad|iPhone|iPod/i.test(navigator.userAgent);
+    if (isIOS && selectedWood?.usdz_url) {
+      window.location.href = selectedWood.usdz_url;
+      return;
+    }
+    if (selectedWood?.glb_url) {
+      const sceneViewer = new URL('https://arvr.google.com/scene-viewer/1.0');
+      sceneViewer.searchParams.set('file', selectedWood.glb_url);
+      sceneViewer.searchParams.set('mode', 'ar_only');
+      sceneViewer.searchParams.set('title', selectedWood.name || selectedWood.sku || 'Flooring');
+      window.location.href = sceneViewer.toString();
+    }
   };
 
   const handleSubmitLead = async (e: React.FormEvent) => {
@@ -82,6 +138,7 @@ export default function ARVisualizerPage() {
           address: leadFormData.address,
           projectType: 'flooring',
           selectedWoodId: selectedWood?.id,
+          selectedWoodSku: selectedWood?.sku,
           estimatedSqft: measurements.sqft,
           estimatedPrice,
           roomMeasurements: measurements,
@@ -103,7 +160,7 @@ export default function ARVisualizerPage() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-950">
+    <div className="min-h-screen bg-slate-950 text-white">
       {/* Register the web component on the client */}
       <Script
         type="module"
@@ -116,17 +173,19 @@ export default function ARVisualizerPage() {
         <div className="mx-auto max-w-7xl px-4 py-4">
           <div className="flex items-center justify-between">
             <div>
-              <h1 className="text-2xl font-bold text-white">AR Wood Visualizer</h1>
-              <p className="text-sm text-slate-400">Visualize and measure your space in real-time</p>
+              <h1 className="text-2xl font-bold">AR Wood Visualizer</h1>
+              <p className="text-sm text-slate-400">Place selected floors at true scale. Android + iOS supported.</p>
             </div>
-            <Button
-              onClick={() => (window.location.href = '/calculator')}
-              variant="outline"
-              className="border-orange-600/50 text-orange-500 hover:bg-orange-600/10"
-            >
-              <DollarSign className="mr-2 h-4 w-4" />
-              Price Calculator
-            </Button>
+            <div className="flex gap-2">
+              <Button onClick={() => (window.location.href = '/calculator')} variant="outline" className="border-orange-600/50 text-orange-500 hover:bg-orange-600/10">
+                <DollarSign className="mr-2 h-4 w-4" />
+                Price Calculator
+              </Button>
+              <Button onClick={openAR} className="bg-emerald-600 hover:bg-emerald-700">
+                <Scan className="mr-2 h-4 w-4" />
+                Open in AR
+              </Button>
+            </div>
           </div>
         </div>
       </div>
@@ -135,30 +194,59 @@ export default function ARVisualizerPage() {
         {/* AR Viewer */}
         <Card className="mb-6 overflow-hidden border-slate-800 bg-slate-900">
           <div className="relative aspect-video w-full bg-slate-950">
-            {!selectedWood ? (
+            {loading && (
+              <div className="flex h-full items-center justify-center text-slate-300">Loading models…</div>
+            )}
+
+            {!loading && err && (
+              <div className="flex h-full items-center justify-center text-red-300">{err}</div>
+            )}
+
+            {!loading && !err && !selectedWood && (
               <div className="flex h-full items-center justify-center">
-                <Button size="lg" className="gap-2 bg-orange-600 hover:bg-orange-700">
-                  <Camera className="h-5 w-5" />
-                  Select a wood profile to view in AR
-                </Button>
+                <div className="text-slate-300">No profiles yet. Add one in Supabase.</div>
               </div>
-            ) : selectedWood?.glb_url || selectedWood?.usdz_url ? (
-              <model-viewer
-                src={selectedWood.glb_url || ''}
-                ios-src={selectedWood.usdz_url || ''}
-                ar
-                ar-modes="scene-viewer quick-look webxr"
-                ar-scale="fixed"
-                camera-controls
-                touch-action="pan-y"
-                exposure="0.9"
-                poster={selectedWood.poster_url || '/poster.png'}
-                style={{ width: '100%', height: '100%', background: 'transparent' }}
-              ></model-viewer>
-            ) : (
-              <div className="flex h-full items-center justify-center text-slate-300">
-                This profile has no AR assets yet (GLB/USDZ).
-              </div>
+            )}
+
+            {!loading && !err && selectedWood && (
+              <>
+                {(selectedWood.glb_url || selectedWood.usdz_url) ? (
+                  // model-viewer renders inline 3D and exposes the AR button/activation
+                  <model-viewer
+                    ref={mvRef}
+                    src={selectedWood.glb_url || ''}
+                    {...(hasIosUsdz ? { 'ios-src': selectedWood.usdz_url! } : {})}
+                    ar
+                    ar-modes={hasIosUsdz ? 'scene-viewer quick-look webxr' : 'scene-viewer webxr'}
+                    ar-scale="fixed"
+                    camera-controls
+                    touch-action="pan-y"
+                    interaction-prompt="auto"
+                    interaction-prompt-threshold="750"
+                    exposure="0.9"
+                    poster={selectedWood.poster_url || '/poster.png'}
+                    style={{ width: '100%', height: '100%', background: 'transparent' }}
+                    onError={(e: any) => console.error('model-viewer error', e?.detail || e)}
+                  >
+                    {/* Custom AR button (always visible) */}
+                    <Button slot="ar-button" onClick={openAR} className="bg-emerald-600 hover:bg-emerald-700">
+                      <Scan className="mr-2 h-4 w-4" />
+                      View in your space
+                    </Button>
+                  </model-viewer>
+                ) : (
+                  <div className="flex h-full items-center justify-center text-slate-300">
+                    This profile has no AR assets (GLB/USDZ) yet.
+                  </div>
+                )}
+
+                {/* Subtle hint for iOS if USDZ missing */}
+                {!hasIosUsdz && (
+                  <div className="absolute bottom-3 left-3 rounded bg-black/60 px-3 py-1 text-xs text-yellow-200">
+                    Tip: iPhone AR requires a USDZ. You’ll still see the 3D preview here.
+                  </div>
+                )}
+              </>
             )}
           </div>
         </Card>
@@ -167,7 +255,7 @@ export default function ARVisualizerPage() {
           {/* Wood Selection */}
           <div className="lg:col-span-2">
             <Card className="border-slate-800 bg-slate-900 p-6">
-              <h2 className="mb-4 text-xl font-bold text-white">Select Wood Profile</h2>
+              <h2 className="mb-4 text-xl font-bold">Select Wood Profile</h2>
               <div className="grid gap-4 sm:grid-cols-2">
                 {woodProfiles.map((wood) => (
                   <button
@@ -187,7 +275,7 @@ export default function ARVisualizerPage() {
                       />
                     </div>
                     <div className="bg-slate-800/90 p-3 backdrop-blur-sm">
-                      <p className="font-semibold text-white">{wood.name}</p>
+                      <p className="font-semibold">{wood.name}</p>
                       <div className="mt-1 flex items-center justify-between text-sm">
                         <span className="text-slate-400">{wood.wood_type}</span>
                         <span className="font-semibold text-orange-500">${wood.price_per_sqft}/sq ft</span>
@@ -209,7 +297,7 @@ export default function ARVisualizerPage() {
             <Card className="border-slate-800 bg-slate-900 p-6">
               <div className="mb-4 flex items-center gap-2">
                 <Ruler className="h-5 w-5 text-orange-600" />
-                <h2 className="text-xl font-bold text-white">Measurements</h2>
+                <h2 className="text-xl font-bold">Measurements</h2>
               </div>
               <div className="space-y-4">
                 <div>
@@ -237,7 +325,7 @@ export default function ARVisualizerPage() {
                 {measurements.sqft > 0 && (
                   <div className="rounded-lg bg-slate-800 p-3">
                     <p className="text-sm text-slate-400">Total Area</p>
-                    <p className="text-2xl font-bold text-white">{measurements.sqft.toFixed(1)} sq ft</p>
+                    <p className="text-2xl font-bold">{measurements.sqft.toFixed(1)} sq ft</p>
                   </div>
                 )}
               </div>
@@ -247,19 +335,19 @@ export default function ARVisualizerPage() {
               <Card className="border-orange-600/50 bg-slate-900 p-6">
                 <div className="mb-4 flex items-center gap-2">
                   <DollarSign className="h-5 w-5 text-orange-600" />
-                  <h2 className="text-xl font-bold text-white">Price Estimate</h2>
+                  <h2 className="text-xl font-bold">Price Estimate</h2>
                 </div>
                 <div className="space-y-2 text-slate-300">
                   <div className="flex justify-between">
                     <span>Material:</span>
-                    <span className="font-semibold text-white">
-                      ${(measurements.sqft * selectedWood.price_per_sqft).toFixed(2)}
+                    <span className="font-semibold">
+                      ${(measurements.sqft * (selectedWood.price_per_sqft || 0)).toFixed(2)}
                     </span>
                   </div>
                   <div className="border-t border-slate-700 pt-2">
                     <div className="flex justify-between text-lg">
-                      <span className="font-semibold text-white">Estimated Total:</span>
-                      <span className="font-bold text-orange-600">${estimatedPrice.toFixed(2)}</span>
+                      <span className="font-semibold">Estimated Total:</span>
+                      <span className="font-bold text-orange-500">${estimatedPrice.toFixed(2)}</span>
                     </div>
                   </div>
                 </div>
@@ -278,7 +366,7 @@ export default function ARVisualizerPage() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4">
           <Card className="w-full max-w-md border-slate-800 bg-slate-900">
             <div className="flex items-center justify-between border-b border-slate-800 p-4">
-              <h2 className="text-xl font-bold text-white">Get Your Detailed Quote</h2>
+              <h2 className="text-xl font-bold">Get Your Detailed Quote</h2>
               <Button onClick={() => setShowLeadForm(false)} variant="ghost" size="icon" className="text-slate-400 hover:text-white">
                 <X className="h-4 w-4" />
               </Button>

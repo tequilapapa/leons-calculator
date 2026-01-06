@@ -17,18 +17,18 @@ type FormData = {
   // Step 1: Project Type & Quality
   projectType: ProjectType
   qualityTier: QualityTier
-  
+
   // Step 2: Project-Specific (conditional)
   // Refinishing specific
   finishType: string
   floorCondition: string
   moveFurniture: string
-  
+
   // New Install specific
   woodSpecies: string
   finishStyle: string
   demoNeeded: string
-  
+
   // Kitchen Remodel specific
   cabinetsTop: string
   cabinetsBottom: string
@@ -36,13 +36,13 @@ type FormData = {
   lightingFixtures: string
   countertops: string
   backsplash: string
-  
+
   // Step 3: Square Footage & Urgency
   totalSqft: string
   length: string
   width: string
   urgency: Urgency
-  
+
   // Step 4: Contact Info
   firstName: string
   lastName: string
@@ -51,26 +51,10 @@ type FormData = {
 }
 
 const PROJECT_TYPES = [
-  {
-    id: 'new-hardwood' as ProjectType,
-    name: 'New Hardwood Install',
-    description: 'Professional installation of brand new hardwood flooring'
-  },
-  {
-    id: 'refinishing' as ProjectType,
-    name: 'Refinishing Hardwood',
-    description: 'Restore and refinish your existing hardwood floors'
-  },
-  {
-    id: 'luxury-vinyl' as ProjectType,
-    name: 'Luxury Vinyl',
-    description: 'Durable, waterproof luxury vinyl plank installation'
-  },
-  {
-    id: 'kitchen-remodel' as ProjectType,
-    name: 'Kitchen Remodels',
-    description: 'Complete kitchen renovation with flooring and more'
-  }
+  { id: 'new-hardwood' as ProjectType, name: 'New Hardwood Install', description: 'Professional installation of brand new hardwood flooring' },
+  { id: 'refinishing' as ProjectType, name: 'Refinishing Hardwood', description: 'Restore and refinish your existing hardwood floors' },
+  { id: 'luxury-vinyl' as ProjectType, name: 'Luxury Vinyl', description: 'Durable, waterproof luxury vinyl plank installation' },
+  { id: 'kitchen-remodel' as ProjectType, name: 'Kitchen Remodels', description: 'Complete kitchen renovation with flooring and more' }
 ]
 
 const QUALITY_TIERS = [
@@ -79,10 +63,26 @@ const QUALITY_TIERS = [
   { id: 'premium' as QualityTier, name: 'Premium', priceMultiplier: 1.3 }
 ]
 
+// Map UI choices → real SKUs (adjust to your actual rows)
+const skuMap: Record<string, string> = {
+  // Vinyl looks
+  'lvp-wood-look': 'LHF-A-047',
+  'lvp-stone-look': 'LHF-STONE-001',
+  'lvp-tile-look': 'LHF-TILE-001',
+  // Hardwood species
+  oak: 'LHF-OAK-001',
+  maple: 'LHF-MAPLE-001',
+  walnut: 'LHF-WALNUT-001',
+  cherry: 'LHF-CHERRY-001',
+  hickory: 'LHF-HICKORY-001'
+}
+
 export default function CalculatorPage() {
   const router = useRouter()
   const [currentStep, setCurrentStep] = useState(1)
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [pricePulse, setPricePulse] = useState(false)
+
   const [formData, setFormData] = useState<FormData>({
     projectType: '',
     qualityTier: '',
@@ -105,7 +105,7 @@ export default function CalculatorPage() {
     firstName: '',
     lastName: '',
     email: '',
-    phone: '',
+    phone: ''
   })
 
   const totalSteps = 5
@@ -115,6 +115,7 @@ export default function CalculatorPage() {
     setFormData(prev => ({ ...prev, [field]: value }))
   }
 
+  // Auto-calc sqft when L/W change
   useEffect(() => {
     if (formData.length && formData.width) {
       const calculated = (parseFloat(formData.length) * parseFloat(formData.width)).toFixed(0)
@@ -123,111 +124,95 @@ export default function CalculatorPage() {
   }, [formData.length, formData.width])
 
   const calculatePriceRange = () => {
-    if (!formData.totalSqft || !formData.projectType || !formData.qualityTier) {
-      return null
-    }
-
+    if (!formData.totalSqft || !formData.projectType || !formData.qualityTier) return null
     const sqft = parseFloat(formData.totalSqft)
     let basePricePerSqft = 8.5
 
-    // Adjust base price by project type
     switch (formData.projectType) {
-      case 'new-hardwood':
-        basePricePerSqft = 12.0
-        break
-      case 'refinishing':
-        basePricePerSqft = 5.5
-        break
-      case 'luxury-vinyl':
-        basePricePerSqft = 8.0
-        break
-      case 'kitchen-remodel':
-        basePricePerSqft = 15.0
-        break
+      case 'new-hardwood': basePricePerSqft = 12.0; break
+      case 'refinishing': basePricePerSqft = 5.5; break
+      case 'luxury-vinyl': basePricePerSqft = 8.0; break
+      case 'kitchen-remodel': basePricePerSqft = 15.0; break
     }
 
-    // Apply quality tier multiplier
     const tierMultiplier = QUALITY_TIERS.find(t => t.id === formData.qualityTier)?.priceMultiplier || 1.0
     const adjustedPrice = basePricePerSqft * tierMultiplier
 
     const minPrice = (sqft * adjustedPrice * 0.9).toFixed(0)
     const maxPrice = (sqft * adjustedPrice * 1.1).toFixed(0)
-
     return { min: minPrice, max: maxPrice, avg: (sqft * adjustedPrice).toFixed(0) }
   }
 
   const priceRange = calculatePriceRange()
 
+  // Price pulse effect
+  useEffect(() => {
+    if (!priceRange) return
+    setPricePulse(true)
+    const t = setTimeout(() => setPricePulse(false), 700)
+    return () => clearTimeout(t)
+  }, [priceRange?.avg])
+
+  // Step validation (Vinyl no longer requires finishStyle)
   const canProceed = () => {
     switch (currentStep) {
       case 1:
-        return formData.projectType && formData.qualityTier
+        return !!(formData.projectType && formData.qualityTier)
       case 2:
         if (formData.projectType === 'refinishing') {
-          return formData.finishType && formData.floorCondition
-        } else if (formData.projectType === 'new-hardwood' || formData.projectType === 'luxury-vinyl') {
-          return formData.woodSpecies && formData.finishStyle && formData.demoNeeded
+          return !!(formData.finishType && formData.floorCondition)
+        } else if (formData.projectType === 'new-hardwood') {
+          return !!(formData.woodSpecies && formData.finishStyle && formData.demoNeeded)
+        } else if (formData.projectType === 'luxury-vinyl') {
+          // vinyl: just need look + demo selection
+          return !!(formData.woodSpecies && formData.demoNeeded)
         } else if (formData.projectType === 'kitchen-remodel') {
-          return formData.cabinetsTop && formData.countertops
+          return !!(formData.cabinetsTop && formData.countertops)
         }
         return true
       case 3:
-        return formData.totalSqft && formData.urgency
+        return !!(formData.totalSqft && formData.urgency)
       case 4:
-        return formData.firstName && formData.lastName && formData.email && formData.phone
+        return !!(formData.firstName && formData.lastName && formData.email && formData.phone)
       default:
         return true
     }
   }
 
   const handleNext = async () => {
-    if (currentStep < totalSteps) {
-      setCurrentStep(currentStep + 1)
-      
-      // Track progression
+    if (currentStep >= totalSteps) return
+    setCurrentStep(currentStep + 1)
+    // Track progression
+    try {
       await fetch('/api/tracking', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          event: 'calculator_step_complete',
-          step: currentStep,
-          data: formData
-        })
+        body: JSON.stringify({ event: 'calculator_step_complete', step: currentStep, data: formData })
       })
-    }
+    } catch {}
   }
 
   const handleBack = () => {
-    if (currentStep > 1) {
-      setCurrentStep(currentStep - 1)
-    }
+    if (currentStep > 1) setCurrentStep(currentStep - 1)
   }
 
   const handleSubmit = async () => {
     setIsSubmitting(true)
-    
     try {
       const response = await fetch('/api/submit-lead', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          ...formData,
-          priceRange,
-          source: 'calculator'
-        })
+        body: JSON.stringify({ ...formData, priceRange, source: 'calculator' })
       })
-
       if (response.ok) {
-        setCurrentStep(5) // Success screen
-        
-        await fetch('/api/tracking', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            event: 'lead_submitted',
-            data: { email: formData.email, projectType: formData.projectType }
+        setCurrentStep(5) // Success
+        try {
+          await fetch('/api/tracking', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ event: 'lead_submitted', data: { email: formData.email, projectType: formData.projectType } })
           })
-        })
+        } catch {}
       }
     } catch (error) {
       console.error('Submission error:', error)
@@ -236,9 +221,24 @@ export default function CalculatorPage() {
     }
   }
 
+  // Route to real camera page with inferred SKU
+  const goToCamera = () => {
+    const pick = formData.woodSpecies?.trim()
+    const sku = (pick && skuMap[pick]) || 'LHF-A-047'
+    router.push(`/camera?sku=${encodeURIComponent(sku)}`)
+  }
+
   return (
     <div className="min-h-screen bg-gradient-to-b from-background to-muted py-12 px-4">
       <div className="container mx-auto max-w-2xl">
+        {/* New: announcement hook */}
+        <div className="mb-4 rounded-lg border bg-primary/5 p-3 animate-in fade-in slide-in-from-top-2">
+          <span className="inline-flex items-center gap-2">
+            <span className="h-2 w-2 rounded-full bg-green-500 animate-pulse" />
+            <span className="font-semibold">New:</span> Try our AR visualizer — see floors in your room.
+          </span>
+        </div>
+
         {/* Progress Bar */}
         <div className="mb-8">
           <div className="flex justify-between items-center mb-2">
@@ -262,18 +262,18 @@ export default function CalculatorPage() {
               {currentStep === 2 && 'Tell us more about your specific needs'}
               {currentStep === 3 && 'Help us understand your space and timeline'}
               {currentStep === 4 && 'Get your personalized quote'}
-              {currentStep === 5 && 'We\'ll be in touch soon'}
+              {currentStep === 5 && "We'll be in touch soon"}
             </CardDescription>
           </CardHeader>
 
           <CardContent className="space-y-6">
-            {/* Step 1: Project Type & Quality */}
+            {/* Step 1 */}
             {currentStep === 1 && (
               <div className="space-y-6">
                 <div>
                   <Label className="text-base font-semibold mb-3 block">Select Project Type</Label>
                   <div className="grid gap-3">
-                    {PROJECT_TYPES.map((project) => (
+                    {PROJECT_TYPES.map(project => (
                       <button
                         key={project.id}
                         onClick={() => updateField('projectType', project.id)}
@@ -292,7 +292,7 @@ export default function CalculatorPage() {
                   <div>
                     <Label className="text-base font-semibold mb-3 block">Quality Level</Label>
                     <div className="grid grid-cols-3 gap-3">
-                      {QUALITY_TIERS.map((tier) => (
+                      {QUALITY_TIERS.map(tier => (
                         <button
                           key={tier.id}
                           onClick={() => updateField('qualityTier', tier.id)}
@@ -309,20 +309,16 @@ export default function CalculatorPage() {
               </div>
             )}
 
-            {/* Step 2: Project-Specific Questions (Conditional) */}
+            {/* Step 2 */}
             {currentStep === 2 && (
               <div className="space-y-4">
-                {/* Refinishing Questions */}
+                {/* Refinishing */}
                 {formData.projectType === 'refinishing' && (
                   <>
                     <div>
                       <Label htmlFor="finishType">Finish Type</Label>
-                      <select
-                        id="finishType"
-                        className="w-full h-10 px-3 rounded-md border border-input bg-background"
-                        value={formData.finishType}
-                        onChange={(e) => updateField('finishType', e.target.value)}
-                      >
+                      <select id="finishType" className="w-full h-10 px-3 rounded-md border border-input bg-background"
+                        value={formData.finishType} onChange={e => updateField('finishType', e.target.value)}>
                         <option value="">Select finish</option>
                         <option value="natural">Natural Finish</option>
                         <option value="stained-light">Stained - Light</option>
@@ -334,12 +330,8 @@ export default function CalculatorPage() {
                     </div>
                     <div>
                       <Label htmlFor="floorCondition">Floor Condition</Label>
-                      <select
-                        id="floorCondition"
-                        className="w-full h-10 px-3 rounded-md border border-input bg-background"
-                        value={formData.floorCondition}
-                        onChange={(e) => updateField('floorCondition', e.target.value)}
-                      >
+                      <select id="floorCondition" className="w-full h-10 px-3 rounded-md border border-input bg-background"
+                        value={formData.floorCondition} onChange={e => updateField('floorCondition', e.target.value)}>
                         <option value="">Select condition</option>
                         <option value="light-scratches">Light Scratches</option>
                         <option value="moderate-wear">Moderate Wear</option>
@@ -348,12 +340,8 @@ export default function CalculatorPage() {
                     </div>
                     <div>
                       <Label htmlFor="moveFurniture">Move Furniture?</Label>
-                      <select
-                        id="moveFurniture"
-                        className="w-full h-10 px-3 rounded-md border border-input bg-background"
-                        value={formData.moveFurniture}
-                        onChange={(e) => updateField('moveFurniture', e.target.value)}
-                      >
+                      <select id="moveFurniture" className="w-full h-10 px-3 rounded-md border border-input bg-background"
+                        value={formData.moveFurniture} onChange={e => updateField('moveFurniture', e.target.value)}>
                         <option value="">Select option</option>
                         <option value="yes-need-help">Yes, Need Help Moving</option>
                         <option value="no-already-empty">No, Room is Empty</option>
@@ -363,17 +351,13 @@ export default function CalculatorPage() {
                   </>
                 )}
 
-                {/* New Install Questions (Hardwood or Vinyl) */}
+                {/* New Install (Hardwood/Vinyl) */}
                 {(formData.projectType === 'new-hardwood' || formData.projectType === 'luxury-vinyl') && (
                   <>
                     <div>
                       <Label htmlFor="woodSpecies">Wood Species / Material</Label>
-                      <select
-                        id="woodSpecies"
-                        className="w-full h-10 px-3 rounded-md border border-input bg-background"
-                        value={formData.woodSpecies}
-                        onChange={(e) => updateField('woodSpecies', e.target.value)}
-                      >
+                      <select id="woodSpecies" className="w-full h-10 px-3 rounded-md border border-input bg-background"
+                        value={formData.woodSpecies} onChange={e => updateField('woodSpecies', e.target.value)}>
                         <option value="">Select type</option>
                         {formData.projectType === 'new-hardwood' ? (
                           <>
@@ -392,29 +376,23 @@ export default function CalculatorPage() {
                         )}
                       </select>
                     </div>
+
                     {formData.projectType === 'new-hardwood' && (
                       <div>
                         <Label htmlFor="finishStyle">Finish Style</Label>
-                        <select
-                          id="finishStyle"
-                          className="w-full h-10 px-3 rounded-md border border-input bg-background"
-                          value={formData.finishStyle}
-                          onChange={(e) => updateField('finishStyle', e.target.value)}
-                        >
+                        <select id="finishStyle" className="w-full h-10 px-3 rounded-md border border-input bg-background"
+                          value={formData.finishStyle} onChange={e => updateField('finishStyle', e.target.value)}>
                           <option value="">Select finish</option>
                           <option value="prefinished">Prefinished</option>
                           <option value="unfinished">Unfinished (site-finished)</option>
                         </select>
                       </div>
                     )}
+
                     <div>
                       <Label htmlFor="demoNeeded">Existing Floor Removal</Label>
-                      <select
-                        id="demoNeeded"
-                        className="w-full h-10 px-3 rounded-md border border-input bg-background"
-                        value={formData.demoNeeded}
-                        onChange={(e) => updateField('demoNeeded', e.target.value)}
-                      >
+                      <select id="demoNeeded" className="w-full h-10 px-3 rounded-md border border-input bg-background"
+                        value={formData.demoNeeded} onChange={e => updateField('demoNeeded', e.target.value)}>
                         <option value="">Select option</option>
                         <option value="already-demo">Already Removed</option>
                         <option value="include-demo">Include Demo/Removal</option>
@@ -424,17 +402,13 @@ export default function CalculatorPage() {
                   </>
                 )}
 
-                {/* Kitchen Remodel Questions */}
+                {/* Kitchen Remodel */}
                 {formData.projectType === 'kitchen-remodel' && (
                   <>
                     <div>
                       <Label htmlFor="cabinetsTop">Upper Cabinets</Label>
-                      <select
-                        id="cabinetsTop"
-                        className="w-full h-10 px-3 rounded-md border border-input bg-background"
-                        value={formData.cabinetsTop}
-                        onChange={(e) => updateField('cabinetsTop', e.target.value)}
-                      >
+                      <select id="cabinetsTop" className="w-full h-10 px-3 rounded-md border border-input bg-background"
+                        value={formData.cabinetsTop} onChange={e => updateField('cabinetsTop', e.target.value)}>
                         <option value="">Select option</option>
                         <option value="keep-existing">Keep Existing</option>
                         <option value="refacing">Refacing</option>
@@ -443,12 +417,8 @@ export default function CalculatorPage() {
                     </div>
                     <div>
                       <Label htmlFor="cabinetsBottom">Lower Cabinets</Label>
-                      <select
-                        id="cabinetsBottom"
-                        className="w-full h-10 px-3 rounded-md border border-input bg-background"
-                        value={formData.cabinetsBottom}
-                        onChange={(e) => updateField('cabinetsBottom', e.target.value)}
-                      >
+                      <select id="cabinetsBottom" className="w-full h-10 px-3 rounded-md border border-input bg-background"
+                        value={formData.cabinetsBottom} onChange={e => updateField('cabinetsBottom', e.target.value)}>
                         <option value="">Select option</option>
                         <option value="keep-existing">Keep Existing</option>
                         <option value="refacing">Refacing</option>
@@ -457,12 +427,8 @@ export default function CalculatorPage() {
                     </div>
                     <div>
                       <Label htmlFor="countertops">Countertops</Label>
-                      <select
-                        id="countertops"
-                        className="w-full h-10 px-3 rounded-md border border-input bg-background"
-                        value={formData.countertops}
-                        onChange={(e) => updateField('countertops', e.target.value)}
-                      >
+                      <select id="countertops" className="w-full h-10 px-3 rounded-md border border-input bg-background"
+                        value={formData.countertops} onChange={e => updateField('countertops', e.target.value)}>
                         <option value="">Select material</option>
                         <option value="granite">Granite</option>
                         <option value="quartz">Quartz</option>
@@ -472,12 +438,8 @@ export default function CalculatorPage() {
                     </div>
                     <div>
                       <Label htmlFor="backsplash">Backsplash</Label>
-                      <select
-                        id="backsplash"
-                        className="w-full h-10 px-3 rounded-md border border-input bg-background"
-                        value={formData.backsplash}
-                        onChange={(e) => updateField('backsplash', e.target.value)}
-                      >
+                      <select id="backsplash" className="w-full h-10 px-3 rounded-md border border-input bg-background"
+                        value={formData.backsplash} onChange={e => updateField('backsplash', e.target.value)}>
                         <option value="">Select option</option>
                         <option value="tile">Tile</option>
                         <option value="glass">Glass</option>
@@ -487,12 +449,8 @@ export default function CalculatorPage() {
                     </div>
                     <div>
                       <Label htmlFor="sinkPlumbing">Sink & Plumbing Updates</Label>
-                      <select
-                        id="sinkPlumbing"
-                        className="w-full h-10 px-3 rounded-md border border-input bg-background"
-                        value={formData.sinkPlumbing}
-                        onChange={(e) => updateField('sinkPlumbing', e.target.value)}
-                      >
+                      <select id="sinkPlumbing" className="w-full h-10 px-3 rounded-md border border-input bg-background"
+                        value={formData.sinkPlumbing} onChange={e => updateField('sinkPlumbing', e.target.value)}>
                         <option value="">Select option</option>
                         <option value="keep-existing">Keep Existing</option>
                         <option value="new-sink">New Sink</option>
@@ -501,12 +459,8 @@ export default function CalculatorPage() {
                     </div>
                     <div>
                       <Label htmlFor="lightingFixtures">Lighting Fixtures</Label>
-                      <select
-                        id="lightingFixtures"
-                        className="w-full h-10 px-3 rounded-md border border-input bg-background"
-                        value={formData.lightingFixtures}
-                        onChange={(e) => updateField('lightingFixtures', e.target.value)}
-                      >
+                      <select id="lightingFixtures" className="w-full h-10 px-3 rounded-md border border-input bg-background"
+                        value={formData.lightingFixtures} onChange={e => updateField('lightingFixtures', e.target.value)}>
                         <option value="">Select option</option>
                         <option value="keep-existing">Keep Existing</option>
                         <option value="update-fixtures">Update Fixtures</option>
@@ -518,7 +472,7 @@ export default function CalculatorPage() {
               </div>
             )}
 
-            {/* Step 3: Square Footage & Urgency */}
+            {/* Step 3 */}
             {currentStep === 3 && (
               <div className="space-y-4">
                 <div>
@@ -526,89 +480,54 @@ export default function CalculatorPage() {
                   <div className="grid grid-cols-2 gap-4 mb-3">
                     <div>
                       <Label htmlFor="length" className="text-sm">Length (feet)</Label>
-                      <Input
-                        id="length"
-                        type="number"
-                        placeholder="20"
-                        value={formData.length}
-                        onChange={(e) => updateField('length', e.target.value)}
-                      />
+                      <Input id="length" type="number" placeholder="20" value={formData.length}
+                        onChange={e => updateField('length', e.target.value)} />
                     </div>
                     <div>
                       <Label htmlFor="width" className="text-sm">Width (feet)</Label>
-                      <Input
-                        id="width"
-                        type="number"
-                        placeholder="15"
-                        value={formData.width}
-                        onChange={(e) => updateField('width', e.target.value)}
-                      />
+                      <Input id="width" type="number" placeholder="15" value={formData.width}
+                        onChange={e => updateField('width', e.target.value)} />
                     </div>
                   </div>
                   <div>
                     <Label htmlFor="totalSqft" className="text-sm">Total Square Feet (editable)</Label>
-                    <Input
-                      id="totalSqft"
-                      type="number"
-                      placeholder="300"
-                      value={formData.totalSqft}
-                      onChange={(e) => updateField('totalSqft', e.target.value)}
-                    />
-                    <p className="text-xs text-muted-foreground mt-1">
-                      Auto-calculated from L × W, but you can edit it
-                    </p>
+                    <Input id="totalSqft" type="number" placeholder="300" value={formData.totalSqft}
+                      onChange={e => updateField('totalSqft', e.target.value)} />
+                    <p className="text-xs text-muted-foreground mt-1">Auto-calculated from L × W, but you can edit it</p>
                   </div>
                 </div>
 
                 <div>
                   <Label className="text-base font-semibold mb-3 block">Project Timeline</Label>
                   <div className="grid gap-3">
-                    <button
-                      onClick={() => updateField('urgency', 'asap')}
-                      className={`p-3 rounded-lg border-2 text-left transition-all hover:border-primary ${
-                        formData.urgency === 'asap' ? 'border-primary bg-primary/5' : 'border-border'
-                      }`}
-                    >
+                    <button onClick={() => updateField('urgency', 'asap')}
+                      className={`p-3 rounded-lg border-2 text-left transition-all hover:border-primary ${formData.urgency === 'asap' ? 'border-primary bg-primary/5' : 'border-border'}`}>
                       <div className="font-semibold">ASAP</div>
                       <div className="text-sm text-muted-foreground">Ready to start immediately</div>
                     </button>
-                    <button
-                      onClick={() => updateField('urgency', '1-2-weeks')}
-                      className={`p-3 rounded-lg border-2 text-left transition-all hover:border-primary ${
-                        formData.urgency === '1-2-weeks' ? 'border-primary bg-primary/5' : 'border-border'
-                      }`}
-                    >
+                    <button onClick={() => updateField('urgency', '1-2-weeks')}
+                      className={`p-3 rounded-lg border-2 text-left transition-all hover:border-primary ${formData.urgency === '1-2-weeks' ? 'border-primary bg-primary/5' : 'border-border'}`}>
                       <div className="font-semibold">1-2 Weeks</div>
                       <div className="text-sm text-muted-foreground">Planning to start soon</div>
                     </button>
-                    <button
-                      onClick={() => updateField('urgency', '1-month')}
-                      className={`p-3 rounded-lg border-2 text-left transition-all hover:border-primary ${
-                        formData.urgency === '1-month' ? 'border-primary bg-primary/5' : 'border-border'
-                      }`}
-                    >
+                    <button onClick={() => updateField('urgency', '1-month')}
+                      className={`p-3 rounded-lg border-2 text-left transition-all hover:border-primary ${formData.urgency === '1-month' ? 'border-primary bg-primary/5' : 'border-border'}`}>
                       <div className="font-semibold">Within a Month</div>
                       <div className="text-sm text-muted-foreground">Still in planning phase</div>
                     </button>
-                    <button
-                      onClick={() => updateField('urgency', 'browsing')}
-                      className={`p-3 rounded-lg border-2 text-left transition-all hover:border-primary ${
-                        formData.urgency === 'browsing' ? 'border-primary bg-primary/5' : 'border-border'
-                      }`}
-                    >
+                    <button onClick={() => updateField('urgency', 'browsing')}
+                      className={`p-3 rounded-lg border-2 text-left transition-all hover:border-primary ${formData.urgency === 'browsing' ? 'border-primary bg-primary/5' : 'border-border'}`}>
                       <div className="font-semibold">Just Browsing</div>
                       <div className="text-sm text-muted-foreground">Gathering information</div>
                     </button>
                   </div>
                 </div>
 
-                {/* Live Price Range */}
+                {/* Live Price Range with pulse */}
                 {priceRange && (
-                  <div className="p-6 bg-gradient-to-br from-primary/10 to-primary/5 rounded-lg border-2 border-primary/20">
+                  <div className={`p-6 bg-gradient-to-br from-primary/10 to-primary/5 rounded-lg border-2 border-primary/20 ${pricePulse ? 'animate-pulse' : ''}`}>
                     <p className="text-sm font-medium text-muted-foreground mb-2">Your Estimated Price Range</p>
-                    <p className="text-3xl font-bold mb-1">
-                      ${priceRange.min} - ${priceRange.max}
-                    </p>
+                    <p className="text-3xl font-bold mb-1">${priceRange.min} - ${priceRange.max}</p>
                     <p className="text-sm text-muted-foreground">
                       Average: ${priceRange.avg} • Based on {formData.totalSqft} sq ft
                     </p>
@@ -629,48 +548,30 @@ export default function CalculatorPage() {
               </div>
             )}
 
-            {/* Step 4: Contact Info */}
+            {/* Step 4 */}
             {currentStep === 4 && (
               <div className="space-y-4">
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <Label htmlFor="firstName">First Name</Label>
-                    <Input
-                      id="firstName"
-                      placeholder="John"
-                      value={formData.firstName}
-                      onChange={(e) => updateField('firstName', e.target.value)}
-                    />
+                    <Input id="firstName" placeholder="John" value={formData.firstName}
+                      onChange={e => updateField('firstName', e.target.value)} />
                   </div>
                   <div>
                     <Label htmlFor="lastName">Last Name</Label>
-                    <Input
-                      id="lastName"
-                      placeholder="Doe"
-                      value={formData.lastName}
-                      onChange={(e) => updateField('lastName', e.target.value)}
-                    />
+                    <Input id="lastName" placeholder="Doe" value={formData.lastName}
+                      onChange={e => updateField('lastName', e.target.value)} />
                   </div>
                 </div>
                 <div>
                   <Label htmlFor="email">Email</Label>
-                  <Input
-                    id="email"
-                    type="email"
-                    placeholder="john@example.com"
-                    value={formData.email}
-                    onChange={(e) => updateField('email', e.target.value)}
-                  />
+                  <Input id="email" type="email" placeholder="john@example.com" value={formData.email}
+                    onChange={e => updateField('email', e.target.value)} />
                 </div>
                 <div>
                   <Label htmlFor="phone">Phone Number</Label>
-                  <Input
-                    id="phone"
-                    type="tel"
-                    placeholder="(555) 123-4567"
-                    value={formData.phone}
-                    onChange={(e) => updateField('phone', e.target.value)}
-                  />
+                  <Input id="phone" type="tel" placeholder="(555) 123-4567" value={formData.phone}
+                    onChange={e => updateField('phone', e.target.value)} />
                 </div>
 
                 {/* Quote Summary */}
@@ -728,26 +629,28 @@ export default function CalculatorPage() {
                 </div>
 
                 <div className="pt-6 space-y-3">
-                  <Button 
-                    onClick={() => router.push('/visualizer')} 
-                    size="lg" 
-                    className="w-full"
-                  >
+                  {/* Route to actual camera app */}
+                  <Button onClick={goToCamera} size="lg" className="w-full">
                     <Camera className="mr-2 h-5 w-5" />
                     Try AR Visualizer with Your Options
                   </Button>
-                  
-                  <Button 
-                    variant="outline" 
-                    size="lg" 
+
+                  <Button
+                    variant="outline"
+                    size="lg"
                     className="w-full bg-transparent"
-                    onClick={() => window.open('https://www.leonshardwood.com/booking-calendar/flooring-consultation?referral=service_list_widget', '_blank')}
+                    onClick={() =>
+                      window.open(
+                        'https://www.leonshardwood.com/booking-calendar/flooring-consultation?referral=service_list_widget',
+                        '_blank'
+                      )
+                    }
                   >
                     <Calendar className="mr-2 h-5 w-5" />
                     Book Free Consultation
                     <ExternalLink className="ml-2 h-4 w-4" />
                   </Button>
-                  
+
                   <p className="text-sm text-muted-foreground pt-2">
                     Schedule an in-home consultation to see samples and get exact pricing
                   </p>
@@ -758,28 +661,18 @@ export default function CalculatorPage() {
             {/* Navigation Buttons */}
             {currentStep < 5 && (
               <div className="flex justify-between pt-6">
-                <Button
-                  variant="outline"
-                  onClick={handleBack}
-                  disabled={currentStep === 1}
-                >
+                <Button variant="outline" onClick={handleBack} disabled={currentStep === 1}>
                   <ArrowLeft className="mr-2 h-4 w-4" />
                   Back
                 </Button>
 
                 {currentStep < 4 ? (
-                  <Button
-                    onClick={handleNext}
-                    disabled={!canProceed()}
-                  >
+                  <Button onClick={handleNext} disabled={!canProceed()}>
                     Next
                     <ArrowRight className="ml-2 h-4 w-4" />
                   </Button>
                 ) : (
-                  <Button
-                    onClick={handleSubmit}
-                    disabled={!canProceed() || isSubmitting}
-                  >
+                  <Button onClick={handleSubmit} disabled={!canProceed() || isSubmitting}>
                     {isSubmitting ? 'Submitting...' : 'Get My Quote'}
                   </Button>
                 )}
@@ -788,6 +681,25 @@ export default function CalculatorPage() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Sticky action bar to keep CTAs visible */}
+      {currentStep < 5 && (
+        <div className="fixed inset-x-0 bottom-3 z-40 mx-auto w-[min(720px,95%)] rounded-xl border bg-background/95 shadow-lg backdrop-blur supports-[backdrop-filter]:bg-background/60 p-3 flex gap-2">
+          <Button onClick={goToCamera} className="flex-1">
+            <Camera className="mr-2 h-5 w-5" />
+            View in AR
+          </Button>
+          {currentStep < 4 ? (
+            <Button onClick={handleNext} disabled={!canProceed()} className="w-36">
+              Next <ArrowRight className="ml-2 h-4 w-4" />
+            </Button>
+          ) : (
+            <Button onClick={handleSubmit} disabled={!canProceed() || isSubmitting} className="w-36">
+              {isSubmitting ? 'Submitting…' : 'Get Quote'}
+            </Button>
+          )}
+        </div>
+      )}
     </div>
   )
 }
