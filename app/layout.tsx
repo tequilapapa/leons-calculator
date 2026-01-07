@@ -4,6 +4,7 @@ import type { ReactNode } from 'react'
 import Image from 'next/image'
 import Link from 'next/link'
 import { sans, serif } from './fonts'
+import { SpeedInsights } from '@vercel/speed-insights/next'
 
 export const metadata = {
   title: "Leon’s Hardwood",
@@ -25,6 +26,8 @@ export default function RootLayout({ children }: { children: ReactNode }) {
         </main>
 
         <Footer />
+
+        <SpeedInsights />
       </body>
     </html>
   )
