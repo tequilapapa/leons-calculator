@@ -3,6 +3,7 @@ import './globals.css'
 import type { ReactNode } from 'react'
 import Image from 'next/image'
 import Link from 'next/link'
+import { SpeedInsights } from '@vercel/speed-insights/next'
 import { sans, serif } from './fonts'
 
 export const metadata = {
@@ -25,6 +26,8 @@ export default function RootLayout({ children }: { children: ReactNode }) {
         </main>
 
         <Footer />
+
+        <SpeedInsights />
       </body>
     </html>
   )
