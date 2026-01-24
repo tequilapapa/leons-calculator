@@ -4,7 +4,7 @@ import type { ReactNode } from 'react'
 import Image from 'next/image'
 import Link from 'next/link'
 import { sans, serif } from './fonts'
-import { SpeedInsights } from '@vercel/speed-insights/next'
+import { Calendar, Scan, Calculator } from 'lucide-react';
 
 export const metadata = {
   title: "Leon’s Hardwood",
@@ -51,26 +51,20 @@ function Header() {
         </Link>
 
         {/* Desktop nav */}
-        <nav className="hidden items-center gap-2 md:flex">
-          <Link
-            href="/calculator"
-            className="rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-800 transition hover:bg-gray-50"
-          >
-            Calculator
-          </Link>
-          <Link
-            href="/camera"
-            className="rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-800 transition hover:bg-gray-50"
-          >
-            See Floors
-          </Link>
-          <Link
-            href="https://www.leonshardwood.com/quote"
-            className="rounded-lg bg-primary px-3 py-2 text-sm text-primary-foreground transition hover:opacity-90"
-          >
-            Book
-          </Link>
-        </nav>
+       <nav className="hidden items-center gap-2 md:flex">
+  <Link href="/calculator" className="...">
+    <Calculator className="mr-2 h-4 w-4" />
+    Calculator
+  </Link>
+  <Link href="/camera" className="...">
+    <Scan className="mr-2 h-4 w-4" />
+    See Floors
+  </Link>
+  <Link href="https://www.leonshardwood.com/schedule" className="...">
+    <Calendar className="mr-2 h-4 w-4" />
+    Book
+  </Link>
+</nav>
 
         {/* Mobile nav (no JS) */}
         <details className="group relative md:hidden">

@@ -1,5 +1,6 @@
 'use client';
 
+import Script from 'next/script';
 import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
@@ -11,17 +12,7 @@ import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Progress } from '@/components/ui/progress';
-import {
-  Ruler,
-  Layers,
-  Hammer,
-  DollarSign,
-  ArrowRight,
-  ArrowLeft,
-  Scan,
-  Calendar,
-  Check,
-} from 'lucide-react';
+import { Check, ArrowRight, ArrowLeft, Scan, Calendar } from 'lucide-react';
 
 type ProjectType = 'new-hardwood' | 'refinishing' | 'luxury-vinyl' | 'kitchen-remodel' | '';
 type QualityTier = 'economic' | 'standard' | 'premium' | '';
@@ -99,7 +90,7 @@ const skuMap: Record<string, string> = {
   hickory: 'LHF-HICKORY-001',
 };
 
-// NEW: timeline options used on Step 3
+// Step-3 timeline options
 const TIMELINE: { id: Urgency; label: string; sub: string }[] = [
   { id: 'asap',      label: 'ASAP',            sub: 'Ready to start immediately' },
   { id: '1-2-weeks', label: '1–2 Weeks',       sub: 'Planning to start soon' },
@@ -109,6 +100,16 @@ const TIMELINE: { id: Urgency; label: string; sub: string }[] = [
 
 export default function CalculatorPage() {
   const router = useRouter();
+
+  // --- GHL tracking (safe in Next.js via next/script) ---
+  // This loads once after hydration.
+  const TrackingScript = (
+    <Script
+      src="https://link.msgsndr.com/js/external-tracking.js"
+      strategy="afterInteractive"
+      data-tracking-id="tk_ce216c286042426bb3fc56a03673ebcb"
+    />
+  );
 
   // ===== MODE SWITCH (Flooring vs Kitchen) =====
   const [mode, setMode] = useState<'flooring' | 'kitchen'>('flooring');
@@ -139,7 +140,7 @@ export default function CalculatorPage() {
     totalSqft: '',
     length: '',
     width: '',
-    urgency: '', // stay blank so user must choose; set 'browsing' here if you prefer a default
+    urgency: '',
     firstName: '',
     lastName: '',
     email: '',
@@ -156,7 +157,6 @@ export default function CalculatorPage() {
     }
   }, [formData.length, formData.width]);
 
-  // Simple material price preview for the wizard (non-kitchen)
   const calculatePriceRange = () => {
     if (!formData.totalSqft || !formData.projectType || !formData.qualityTier) return null;
     const sqft = parseFloat(formData.totalSqft);
@@ -165,7 +165,7 @@ export default function CalculatorPage() {
       case 'new-hardwood': basePricePerSqft = 12.0; break;
       case 'refinishing': basePricePerSqft = 5.5; break;
       case 'luxury-vinyl': basePricePerSqft = 8.0; break;
-      case 'kitchen-remodel': basePricePerSqft = 15.0; break; // legacy; real kitchen calc is in KitchenEstimator
+      case 'kitchen-remodel': basePricePerSqft = 15.0; break; // legacy; kitchen mode uses KitchenEstimator
     }
     const tierMultiplier = QUALITY_TIERS.find(t => t.id === formData.qualityTier)?.priceMultiplier || 1.0;
     const adjusted = basePricePerSqft * tierMultiplier;
@@ -184,7 +184,7 @@ export default function CalculatorPage() {
     return () => clearTimeout(t);
   }, [priceRange?.avg]);
 
-  // Products (Flooring mode) – currently not rendered, but kept for future product grid
+  // Products (not rendered now; kept for future product grid)
   const [profiles, setProfiles] = useState<WoodProfile[]>([]);
   const [selected, setSelected] = useState<WoodProfile | null>(null);
   const [material, setMaterial] = useState<'hardwood' | 'vinyl' | 'engineered' | null>(null);
@@ -223,7 +223,7 @@ export default function CalculatorPage() {
         if (formData.projectType === 'kitchen-remodel') return !!(formData.cabinetsTop && formData.countertops);
         return true;
       case 3:
-        return !!(formData.totalSqft && formData.urgency); // urgency now set via timeline selector
+        return !!(formData.totalSqft && formData.urgency);
       case 4:
         return !!(formData.firstName && formData.lastName && formData.email && formData.phone);
       default:
@@ -245,41 +245,38 @@ export default function CalculatorPage() {
 
   const handleBack = () => setCurrentStep((s) => Math.max(1, s - 1));
 
-const handleSubmit = async () => {
-  setIsSubmitting(true);
-  try {
-    const response = await fetch('/api/submit-lead', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ...formData, priceRange, source: 'calculator' }),
-    });
+  const handleSubmit = async () => {
+    setIsSubmitting(true);
+    try {
+      const response = await fetch('/api/submit-lead', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...formData, priceRange, source: 'calculator' }),
+      });
 
-    if (response.ok) {
-      // briefly show Step 5 "Thank you"
-      setCurrentStep(5);
-      try {
-        await fetch('/api/tracking', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            event: 'lead_submitted',
-            data: { email: formData.email, projectType: formData.projectType },
-          }),
-        });
-      } catch {}
+      if (response.ok) {
+        setCurrentStep(5);
+        try {
+          await fetch('/api/tracking', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              event: 'lead_submitted',
+              data: { email: formData.email, projectType: formData.projectType },
+            }),
+          });
+        } catch {}
 
-      // redirect after a short delay
-      setTimeout(() => {
-        window.location.href = 'https://www.leonshardwood.com/quote';
-        // or: router.push('https://www.leonshardwood.com/quote')
-      }, 1200);
+        setTimeout(() => {
+          window.location.href = 'https://www.leonshardwood.com/quote';
+        }, 1200);
+      }
+    } catch (e) {
+      console.error('Submission error:', e);
+    } finally {
+      setIsSubmitting(false);
     }
-  } catch (e) {
-    console.error('Submission error:', e);
-  } finally {
-    setIsSubmitting(false);
-  }
-};
+  };
 
   const goToCamera = () => {
     const pick = formData.woodSpecies?.trim();
@@ -287,9 +284,10 @@ const handleSubmit = async () => {
     router.push(`/camera?sku=${encodeURIComponent(sku)}`);
   };
 
-  // ===== RENDER =====
   return (
     <div className="min-h-screen bg-gradient-to-b from-background to-muted py-12 px-4">
+      {TrackingScript}
+
       <div className="container mx-auto max-w-6xl">
         {/* Mode switcher */}
         <div className="mb-4 flex flex-wrap gap-2">
@@ -305,7 +303,7 @@ const handleSubmit = async () => {
           <button
             onClick={() => setMode('kitchen')}
             className={`rounded-lg border px-3 py-2 text-sm transition ${
-              mode === 'kitchen' ? 'border-primary bg-primary/10' : 'border-gray-300 hover:bg-gray-50'
+              mode === 'kitchen' ? 'border-primary bg-primary/10' : 'border-gray-50 hover:bg-gray-50'
             }`}
             aria-pressed={mode === 'kitchen'}
           >
@@ -314,14 +312,11 @@ const handleSubmit = async () => {
         </div>
 
         {mode === 'kitchen' ? (
-          // ===== KITCHEN MODE (accurate estimator) =====
           <KitchenEstimator />
         ) : (
-          // ===== FLOORING MODE (wizard) =====
           <div className="grid gap-6 lg:grid-cols-3">
             {/* LEFT: Wizard */}
             <div className="lg:col-span-2">
-              {/* Announcement */}
               <div className="mb-4 rounded-lg border bg-primary/5 p-3 animate-in fade-in slide-in-from-top-2">
                 <span className="inline-flex items-center gap-2">
                   <span className="h-2 w-2 rounded-full bg-green-500 animate-pulse" />
@@ -329,7 +324,6 @@ const handleSubmit = async () => {
                 </span>
               </div>
 
-              {/* Progress */}
               <div className="mb-8">
                 <div className="mb-2 flex items-center justify-between">
                   <span className="text-sm font-medium">Step {currentStep} of {totalSteps}</span>
@@ -349,7 +343,7 @@ const handleSubmit = async () => {
                   </div>
                 </div>
 
-                {/* STEP 1: Project & Quality */}
+                {/* STEP 1 */}
                 {currentStep === 1 && (
                   <div className="space-y-6">
                     <div>
@@ -391,7 +385,7 @@ const handleSubmit = async () => {
                   </div>
                 )}
 
-                {/* STEP 2: Details */}
+                {/* STEP 2 */}
                 {currentStep === 2 && (
                   <div className="space-y-4">
                     {/* Refinishing */}
@@ -436,7 +430,7 @@ const handleSubmit = async () => {
                       </>
                     )}
 
-                    {/* New Install (Hardwood/Vinyl) */}
+                    {/* New Install */}
                     {(formData.projectType === 'new-hardwood' || formData.projectType === 'luxury-vinyl') && (
                       <>
                         <SelectBlock
@@ -488,7 +482,7 @@ const handleSubmit = async () => {
                       </>
                     )}
 
-                    {/* (Legacy) Kitchen fields – real pricing is in KitchenEstimator mode */}
+                    {/* Legacy kitchen fields */}
                     {formData.projectType === 'kitchen-remodel' && (
                       <>
                         <SelectBlock id="cabinetsTop" label="Upper Cabinets" value={formData.cabinetsTop} onChange={(v) => updateField('cabinetsTop', v)}
@@ -508,7 +502,7 @@ const handleSubmit = async () => {
                   </div>
                 )}
 
-                {/* STEP 3: Size & timeline (fixed) */}
+                {/* STEP 3 */}
                 {currentStep === 3 && (
                   <div className="space-y-6">
                     <div className="grid grid-cols-2 gap-4">
@@ -546,7 +540,6 @@ const handleSubmit = async () => {
                       <p className="mt-1 text-xs text-muted-foreground">Auto-calculated from L × W, but you can edit</p>
                     </div>
 
-                    {/* NEW: Timeline selector */}
                     <div>
                       <Label className="text-sm">Project timeline</Label>
                       <div className="mt-2 grid gap-3 sm:grid-cols-2">
@@ -578,7 +571,7 @@ const handleSubmit = async () => {
                   </div>
                 )}
 
-                {/* STEP 4: Contact */}
+                {/* STEP 4 */}
                 {currentStep === 4 && (
                   <div className="space-y-4">
                     <div className="grid grid-cols-2 gap-4">
@@ -590,7 +583,7 @@ const handleSubmit = async () => {
                   </div>
                 )}
 
-                {/* STEP 5: Success */}
+                {/* STEP 5 */}
                 {currentStep === 5 && (
                   <div className="space-y-6 py-8 text-center">
                     <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-green-100">
@@ -652,7 +645,7 @@ const handleSubmit = async () => {
               </Card>
             </div>
 
-            {/* RIGHT: Sticky summary + Reviews */}
+            {/* RIGHT: Sticky summary (NO AR/BOOK BUTTONS ANYMORE) */}
             <div className="space-y-4">
               <Card className="sticky top-20 rounded-2xl border border-gray-200 bg-white/80 p-4 shadow-sm">
                 <div className="mb-3 flex items-center justify-between">
@@ -684,23 +677,10 @@ const handleSubmit = async () => {
                   </div>
                 </div>
 
-                <div className="mt-4 grid gap-2 sm:grid-cols-2">
-                  <Button
-                    onClick={goToCamera}
-                    className="bg-primary text-primary-foreground hover:opacity-90"
-                  >
-                    <Scan className="mr-2 h-4 w-4" />
-                    View in AR
-                  </Button>
-                  <Button
-                    onClick={() => router.push('https://www.leonshardwood.com/quote')}
-                    variant="outline"
-                    className="border-gray-300 text-gray-900 hover:bg-gray-50"
-                  >
-                    <Calendar className="mr-2 h-4 w-4" />
-                    Book
-                  </Button>
-                </div>
+                {/* Replace buttons with tiny hint linking to header nav */}
+                <p className="mt-4 text-xs text-gray-500">
+                  Ready to book or preview in AR? Use the top-right navigation.
+                </p>
               </Card>
 
               <ReviewsWidget variant="inline" title="Customers love Leon’s" />
