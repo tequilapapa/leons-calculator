@@ -27,7 +27,6 @@ export default function RootLayout({ children }: { children: ReactNode }) {
 
         <Footer />
 
-        <SpeedInsights />
       </body>
     </html>
   )
