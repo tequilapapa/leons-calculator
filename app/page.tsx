@@ -466,19 +466,14 @@ export default function Page() {
 
                 <div className="p-4 sm:p-6">
                   <div className="rounded-3xl border border-neutral-200 bg-white overflow-hidden">
-                    <iframe
-                      src={GHL_BOOKING_IFRAME_SRC}
-                      title="Leon’s Hardwood Booking"
-                      className="w-full"
-                      style={{
-                        border: 'none',
-                        height: '1200'
-                          typeof window !== 'undefined' && window.innerWidth < 640
-                            ? '1800px'
-                            : '1400px',
-                      }}
-                      scrolling="no"
-                    />
+                   <iframe
+  src={GHL_BOOKING_IFRAME_SRC}
+  title="Leon’s Hardwood Booking"
+  className="w-full min-h-[1200px] sm:min-h-[1000px]"
+  style={{ border: 'none' }}
+  scrolling="no"
+/>
+
                   </div>
 
                   <div className="mt-5">
