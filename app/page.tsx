@@ -37,10 +37,6 @@ type FormData = {
   phone: string;
 };
 
-const GHL_BOOKING_IFRAME_SRC =
-  "https://links.leonshardwood.com/booking/leons-hardwood-eneeq09cng6/sv/6976f752d8c47cb870b0dd4e?heightMode=full&showHeader=false";
-];
-
 const PROJECT_TYPES = [
   { id: 'new-hardwood' as ProjectType, name: 'New Hardwood Install' },
   { id: 'refinishing' as ProjectType, name: 'Refinishing Hardwood' },
@@ -485,22 +481,24 @@ export default function Page() {
         </div>
       </div>
 
-      <div className="p-4 sm:p-6">
-        <div className="rounded-xl border bg-white overflow-hidden">
-          <iframe
-            src={GHL_BOOKING_IFRAME_SRC}
-            title="Leon’s Booking"
-            className="w-full"
-            style={{
-              border: "none",
-              height:
-                typeof window !== "undefined" && window.innerWidth < 640
-                  ? "1150px"
-                  : "940px",
-            }}
-            scrolling="no"
-          />
-        </div>
+      <div className="max-w-5xl mx-auto px-4 py-10">
+  <div className="rounded-3xl border border-neutral-200 bg-white shadow-xl overflow-hidden">
+    <iframe
+      src={BOOKING_FRAME_SRC}
+      title="Leon’s Hardwood Booking"
+      className="w-full"
+      style={{
+        border: "none",
+        height:
+          typeof window !== "undefined" && window.innerWidth < 640
+            ? "1200px"
+            : "900px",
+      }}
+      scrolling="no"
+    />
+  </div>
+</div>
+
 
         <div className="mt-4 flex flex-col sm:flex-row gap-3">
           <Button onClick={goToCamera} size="lg" className="w-full">
