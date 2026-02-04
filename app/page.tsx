@@ -472,10 +472,10 @@ export default function Page() {
                       className="w-full"
                       style={{
                         border: 'none',
-                        height:
+                        height: '1200'
                           typeof window !== 'undefined' && window.innerWidth < 640
-                            ? '1250px'
-                            : '980px',
+                            ? '1800px'
+                            : '1400px',
                       }}
                       scrolling="no"
                     />
