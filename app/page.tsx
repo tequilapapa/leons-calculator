@@ -7,7 +7,7 @@ import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { ArrowLeft, ArrowRight, Calendar, Check } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Check } from 'lucide-react';
 
 type ProjectType = 'new-hardwood' | 'refinishing' | 'luxury-vinyl' | 'kitchen-remodel' | '';
 type QualityTier = 'economic' | 'standard' | 'premium' | '';
@@ -17,20 +17,17 @@ type FormData = {
   projectType: ProjectType;
   qualityTier: QualityTier;
 
-  // basic details (expand later)
   woodSpecies: string;
   finishStyle: string;
   demoNeeded: string;
   finishType: string;
   floorCondition: string;
 
-  // size & urgency
   length: string;
   width: string;
   totalSqft: string;
   urgency: Urgency;
 
-  // contact
   firstName: string;
   lastName: string;
   email: string;
@@ -51,10 +48,10 @@ const QUALITY_TIERS = [
 ];
 
 const TIMELINE: { id: Urgency; label: string; sub: string }[] = [
-  { id: 'asap',      label: 'ASAP',           sub: 'Ready to start immediately' },
-  { id: '1-2-weeks', label: '1–2 Weeks',      sub: 'Planning to start soon' },
-  { id: '1-month',   label: 'Within a Month', sub: 'Still in planning phase' },
-  { id: 'browsing',  label: 'Just Browsing',  sub: 'Gathering info' },
+  { id: 'asap', label: 'ASAP', sub: 'Ready to start immediately' },
+  { id: '1-2-weeks', label: '1–2 Weeks', sub: 'Planning to start soon' },
+  { id: '1-month', label: 'Within a Month', sub: 'Still in planning phase' },
+  { id: 'browsing', label: 'Just Browsing', sub: 'Gathering info' },
 ];
 
 const GHL_BOOKING_IFRAME_SRC =
@@ -63,7 +60,6 @@ const GHL_BOOKING_IFRAME_SRC =
 export default function Page() {
   const totalSteps = 5;
   const [currentStep, setCurrentStep] = useState(1);
-
   const progress = (currentStep / totalSteps) * 100;
 
   const [leadKey] = useState(() => {
@@ -99,7 +95,7 @@ export default function Page() {
   const updateField = (field: keyof FormData, value: string) =>
     setFormData((prev) => ({ ...prev, [field]: value }));
 
-  // Auto-calc sqft from L x W (but editable)
+  // Auto-calc sqft from L x W (still editable)
   useEffect(() => {
     if (!formData.length || !formData.width) return;
     const L = parseFloat(formData.length);
@@ -118,10 +114,18 @@ export default function Page() {
 
     let basePricePerSqft = 8.5;
     switch (formData.projectType) {
-      case 'new-hardwood': basePricePerSqft = 12.0; break;
-      case 'refinishing': basePricePerSqft = 5.5; break;
-      case 'luxury-vinyl': basePricePerSqft = 8.0; break;
-      case 'kitchen-remodel': basePricePerSqft = 15.0; break;
+      case 'new-hardwood':
+        basePricePerSqft = 12.0;
+        break;
+      case 'refinishing':
+        basePricePerSqft = 5.5;
+        break;
+      case 'luxury-vinyl':
+        basePricePerSqft = 8.0;
+        break;
+      case 'kitchen-remodel':
+        basePricePerSqft = 15.0;
+        break;
     }
 
     const tierMultiplier =
@@ -163,7 +167,6 @@ export default function Page() {
       case 1:
         return !!(formData.projectType && formData.qualityTier);
       case 2:
-        // minimal — expand based on your exact step 2 logic
         if (formData.projectType === 'refinishing') return !!(formData.finishType && formData.floorCondition);
         if (formData.projectType === 'new-hardwood') return !!(formData.woodSpecies && formData.finishStyle && formData.demoNeeded);
         if (formData.projectType === 'luxury-vinyl') return !!(formData.woodSpecies && formData.demoNeeded);
@@ -193,11 +196,7 @@ export default function Page() {
 
   return (
     <div className="min-h-screen bg-muted py-10 px-4">
-      {/* Optional tracking */}
-      <Script
-        src="https://link.msgsndr.com/js/external-tracking.js"
-        strategy="afterInteractive"
-      />
+      <Script src="https://link.msgsndr.com/js/external-tracking.js" strategy="afterInteractive" />
 
       <div className="mx-auto max-w-4xl">
         <div className="mb-4 flex items-center justify-between text-sm">
@@ -319,7 +318,7 @@ export default function Page() {
             </div>
           )}
 
-          {/* STEP 3 (SIZE + TIMELINE + PRICE RANGE) */}
+          {/* STEP 3 */}
           {currentStep === 3 && (
             <div className="space-y-6">
               <div className="grid grid-cols-2 gap-4">
@@ -376,14 +375,14 @@ export default function Page() {
                     ${priceRange.min.toLocaleString()} – ${priceRange.max.toLocaleString()}
                   </div>
                   <div className="mt-1 text-sm text-muted-foreground">
-                    Avg: ${priceRange.avg.toLocaleString()} • {formData.totalSqft} sq ft • ${priceRange.base.toFixed(2)}/sqft (tier-adjusted)
+                    Avg: ${priceRange.avg.toLocaleString()} • {formData.totalSqft} sq ft • ${priceRange.base.toFixed(2)}/sqft
                   </div>
                 </div>
               )}
             </div>
           )}
 
-          {/* STEP 4 CONTACT */}
+          {/* STEP 4 */}
           {currentStep === 4 && (
             <div className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
@@ -407,130 +406,133 @@ export default function Page() {
             </div>
           )}
 
-          {/* STEP 5 */}
-{currentStep === 5 && (
-  <div className="mx-auto max-w-3xl space-y-6 py-8">
-    {/* Top success strip */}
-    <div className="rounded-2xl border bg-white/80 shadow-sm overflow-hidden">
-      <div className="flex items-start gap-4 px-6 py-5">
-        <div className="flex h-12 w-12 items-center justify-center rounded-full bg-green-50 border">
-          <Check className="h-6 w-6 text-green-600" />
-        </div>
+          {/* STEP 5 (Luxury + Bigger Booking Widget) */}
+          {currentStep === 5 && (
+            <div className="mx-auto max-w-5xl space-y-6 py-8">
+              <div className="rounded-3xl border bg-white/80 shadow-sm overflow-hidden">
+                <div className="flex items-start gap-4 px-6 py-6">
+                  <div className="flex h-12 w-12 items-center justify-center rounded-full bg-green-50 border">
+                    <Check className="h-6 w-6 text-green-600" />
+                  </div>
 
-        <div className="flex-1">
-          <h3 className="text-xl font-semibold leading-tight">
-            You’re in, {formData.firstName || "—"}.
-          </h3>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Next: pick a time for your free consultation. We’ll confirm details by text/email.
-          </p>
+                  <div className="flex-1">
+                    <h3 className="text-2xl font-semibold leading-tight">
+                      You’re in, {formData.firstName || "—"}.
+                    </h3>
 
-          {/* Persuasion bullets */}
-          <div className="mt-4 grid gap-2 sm:grid-cols-2">
-            <div className="flex items-center gap-2 text-sm">
-              <span className="inline-flex h-6 w-6 items-center justify-center rounded-full border bg-muted/30">
-                ✦
-              </span>
-              <span>Transparent pricing — no pressure</span>
-            </div>
-            <div className="flex items-center gap-2 text-sm">
-              <span className="inline-flex h-6 w-6 items-center justify-center rounded-full border bg-muted/30">
-                ✦
-              </span>
-              <span>Professional timeline + scope review</span>
-            </div>
-            <div className="flex items-center gap-2 text-sm">
-              <span className="inline-flex h-6 w-6 items-center justify-center rounded-full border bg-muted/30">
-                ✦
-              </span>
-              <span>Best-fit materials + finish guidance</span>
-            </div>
-            <div className="flex items-center gap-2 text-sm">
-              <span className="inline-flex h-6 w-6 items-center justify-center rounded-full border bg-muted/30">
-                ✦
-              </span>
-              <span>Optional on-site measure</span>
-            </div>
-          </div>
+                    <p className="mt-2 text-sm text-muted-foreground">
+                      Next: pick a time for your free consultation. We’ll confirm details by text/email.
+                    </p>
 
-          {/* Trust line */}
-          <p className="mt-4 text-xs text-muted-foreground">
-            🛡️ We don’t spam. Your info is used only to confirm your appointment and follow up about your project.
-          </p>
-        </div>
+                    <div className="mt-5 grid gap-3 sm:grid-cols-2">
+                      <div className="flex items-center gap-2 text-sm">
+                        <span className="inline-flex h-7 w-7 items-center justify-center rounded-full border bg-muted/30">✦</span>
+                        <span>Transparent pricing — no pressure</span>
+                      </div>
+                      <div className="flex items-center gap-2 text-sm">
+                        <span className="inline-flex h-7 w-7 items-center justify-center rounded-full border bg-muted/30">✦</span>
+                        <span>Professional timeline + scope review</span>
+                      </div>
+                      <div className="flex items-center gap-2 text-sm">
+                        <span className="inline-flex h-7 w-7 items-center justify-center rounded-full border bg-muted/30">✦</span>
+                        <span>Best-fit materials + finish guidance</span>
+                      </div>
+                      <div className="flex items-center gap-2 text-sm">
+                        <span className="inline-flex h-7 w-7 items-center justify-center rounded-full border bg-muted/30">✦</span>
+                        <span>Optional on-site measure</span>
+                      </div>
+                    </div>
+
+                    <p className="mt-5 text-xs text-muted-foreground">
+                      🛡️ No spam. Your info is only used to confirm your appointment and follow up about your project.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="h-px w-full bg-gradient-to-r from-transparent via-black/10 to-transparent" />
+              </div>
+
+              <div className="rounded-3xl border bg-white shadow-xl overflow-hidden">
+                <div className="px-6 py-5 border-b bg-muted/20">
+                  <div className="flex items-center justify-between">
+                    <div className="text-sm font-semibold">Schedule your consultation</div>
+                    <div className="text-xs text-muted-foreground">Takes ~30 seconds</div>
+                  </div>
+                  <div className="mt-2 flex items-center gap-2 text-xs text-muted-foreground">
+                    <span className="inline-flex h-2 w-2 rounded-full bg-green-500 animate-pulse" />
+                    <span>Limited slots weekly — lock yours in now.</span>
+                  </div>
+                </div>
+
+                <div className="p-4 sm:p-6">
+                  <div className="rounded-3xl border border-neutral-200 bg-white overflow-hidden">
+                    <iframe
+                      src={GHL_BOOKING_IFRAME_SRC}
+                      title="Leon’s Hardwood Booking"
+                      className="w-full"
+                      style={{
+                        border: 'none',
+                        height:
+                          typeof window !== 'undefined' && window.innerWidth < 640
+                            ? '1250px'
+                            : '980px',
+                      }}
+                      scrolling="no"
+                    />
+                  </div>
+
+                  <div className="mt-5">
+                    <Button
+                      variant="outline"
+                      size="lg"
+                      className="w-full bg-transparent"
+                      onClick={() => setCurrentStep(4)}
+                    >
+                      <ArrowLeft className="mr-2 h-4 w-4" />
+                      Edit my details
+                    </Button>
+
+                    <p className="mt-3 text-xs text-muted-foreground">
+                      After booking, you’ll get a confirmation message — reply with photos or notes to speed up your estimate.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Nav buttons */}
+          {currentStep < 5 && (
+            <div className="flex justify-between pt-6">
+              <Button variant="outline" onClick={handleBack} disabled={currentStep === 1}>
+                <ArrowLeft className="mr-2 h-4 w-4" />
+                Back
+              </Button>
+
+              {currentStep < 4 ? (
+                <Button onClick={handleNext} disabled={!canProceed()}>
+                  Next
+                  <ArrowRight className="ml-2 h-4 w-4" />
+                </Button>
+              ) : (
+                <Button onClick={handleSubmit} disabled={!canProceed()}>
+                  Get My Quote
+                </Button>
+              )}
+            </div>
+          )}
+        </Card>
       </div>
-
-      {/* Subtle divider */}
-      <div className="h-px w-full bg-gradient-to-r from-transparent via-black/10 to-transparent" />
     </div>
-
-    {/* Booking card */}
-    <div className="rounded-2xl border bg-white shadow-sm overflow-hidden">
-      <div className="flex flex-col gap-2 px-6 py-5 border-b bg-muted/20">
-        <div className="flex items-center justify-between">
-          <div className="text-sm font-semibold">Schedule your consultation</div>
-          <div className="text-xs text-muted-foreground">
-            Takes ~30 seconds
-          </div>
-
-        {/* Micro-urgency without cringe */}
-        <div className="flex items-center gap-2 text-xs text-muted-foreground">
-          <span className="inline-flex h-2 w-2 rounded-full bg-green-500 animate-pulse" />
-          <span>Limited slots weekly — lock yours in now.</span>
-        </div>
-      </div>
-
-      <div className="max-w-5xl mx-auto px-4 py-10">
-  <div className="rounded-3xl border border-neutral-200 bg-white shadow-xl overflow-hidden">
-    <iframe
-      src={BOOKING_FRAME_SRC}
-      title="Leon’s Hardwood Booking"
-      className="w-full"
-      style={{
-        border: "none",
-        height:
-          typeof window !== "undefined" && window.innerWidth < 640
-            ? "1200px"
-            : "900px",
-      }}
-      scrolling="no"
-    />
-  </div>
-</div>
-
-
-        <div className="mt-4 flex flex-col sm:flex-row gap-3">
-          <Button onClick={goToCamera} size="lg" className="w-full">
-            <Scan className="mr-2 h-5 w-5" />
-            Preview Floors in AR
-          </Button>
-
-          <Button
-            variant="outline"
-            size="lg"
-            className="w-full bg-transparent"
-            onClick={() => window.location.reload()}
-          >
-            <ArrowLeft className="mr-2 h-4 w-4" />
-            Edit my details
-          </Button>
-        </div>
-
-        <p className="mt-3 text-xs text-muted-foreground">
-          Prefer text? After booking, you’ll get a confirmation message — reply with photos or notes to speed up your estimate.
-        </p>
-      </div>
-    </div>
-  </div>
-)}
-
+  );
+}
 
 function SelectBlock({
   label,
   value,
   onChange,
   options,
-</ {
+}: {
   label: string;
   value: string;
   onChange: (v: string) => void;
@@ -554,4 +556,5 @@ function SelectBlock({
     </div>
   );
 }
+
 
