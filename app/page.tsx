@@ -472,7 +472,6 @@ export default function Page() {
           <div className="text-xs text-muted-foreground">
             Takes ~30 seconds
           </div>
-        </div>
 
         {/* Micro-urgency without cringe */}
         <div className="flex items-center gap-2 text-xs text-muted-foreground">
