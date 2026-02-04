@@ -37,6 +37,10 @@ type FormData = {
   phone: string;
 };
 
+const GHL_BOOKING_IFRAME_SRC =
+  "https://links.leonshardwood.com/booking/leons-hardwood-eneeq09cng6/sv/6976f752d8c47cb870b0dd4e?heightMode=full&showHeader=false";
+];
+
 const PROJECT_TYPES = [
   { id: 'new-hardwood' as ProjectType, name: 'New Hardwood Install' },
   { id: 'refinishing' as ProjectType, name: 'Refinishing Hardwood' },
@@ -407,67 +411,122 @@ export default function Page() {
             </div>
           )}
 
-          {/* STEP 5 BOOKING */}
-          {currentStep === 5 && (
-            <div className="space-y-6 text-center">
-              <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-green-100">
-                <Check className="h-7 w-7 text-green-700" />
-              </div>
+          {/* STEP 5 */}
+{currentStep === 5 && (
+  <div className="mx-auto max-w-3xl space-y-6 py-8">
+    {/* Top success strip */}
+    <div className="rounded-2xl border bg-white/80 shadow-sm overflow-hidden">
+      <div className="flex items-start gap-4 px-6 py-5">
+        <div className="flex h-12 w-12 items-center justify-center rounded-full bg-green-50 border">
+          <Check className="h-6 w-6 text-green-600" />
+        </div>
 
-              <div>
-                <h2 className="text-2xl font-bold">You’re in.</h2>
-                <p className="text-muted-foreground">
-                  Next: pick a time for your free consultation.
-                </p>
-              </div>
+        <div className="flex-1">
+          <h3 className="text-xl font-semibold leading-tight">
+            You’re in, {formData.firstName || "—"}.
+          </h3>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Next: pick a time for your free consultation. We’ll confirm details by text/email.
+          </p>
 
-              <div className="rounded-xl border overflow-hidden">
-                <iframe
-                  src={GHL_BOOKING_IFRAME_SRC}
-                  style={{ width: '100%', border: 'none', overflow: 'hidden' }}
-                  scrolling="no"
-                  title="Leon’s Booking"
-                />
-              </div>
-
-              <Script
-                src="https://links.leonshardwood.com/js/form_embed.js"
-                strategy="afterInteractive"
-              />
-
-              <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground">
-                <Calendar className="h-4 w-4" />
-                Booking loads right here — no redirects, no glitches.
-              </div>
+          {/* Persuasion bullets */}
+          <div className="mt-4 grid gap-2 sm:grid-cols-2">
+            <div className="flex items-center gap-2 text-sm">
+              <span className="inline-flex h-6 w-6 items-center justify-center rounded-full border bg-muted/30">
+                ✦
+              </span>
+              <span>Transparent pricing — no pressure</span>
             </div>
-          )}
-
-          {/* NAV */}
-          {currentStep < 5 && (
-            <div className="flex justify-between pt-6">
-              <Button variant="outline" onClick={handleBack} disabled={currentStep === 1}>
-                <ArrowLeft className="mr-2 h-4 w-4" />
-                Back
-              </Button>
-
-              {currentStep < 4 ? (
-                <Button onClick={handleNext} disabled={!canProceed()}>
-                  Next
-                  <ArrowRight className="ml-2 h-4 w-4" />
-                </Button>
-              ) : (
-                <Button onClick={handleSubmit} disabled={!canProceed()}>
-                  Get My Quote
-                  <ArrowRight className="ml-2 h-4 w-4" />
-                </Button>
-              )}
+            <div className="flex items-center gap-2 text-sm">
+              <span className="inline-flex h-6 w-6 items-center justify-center rounded-full border bg-muted/30">
+                ✦
+              </span>
+              <span>Professional timeline + scope review</span>
             </div>
-          )}
-        </Card>
+            <div className="flex items-center gap-2 text-sm">
+              <span className="inline-flex h-6 w-6 items-center justify-center rounded-full border bg-muted/30">
+                ✦
+              </span>
+              <span>Best-fit materials + finish guidance</span>
+            </div>
+            <div className="flex items-center gap-2 text-sm">
+              <span className="inline-flex h-6 w-6 items-center justify-center rounded-full border bg-muted/30">
+                ✦
+              </span>
+              <span>Optional on-site measure</span>
+            </div>
+          </div>
+
+          {/* Trust line */}
+          <p className="mt-4 text-xs text-muted-foreground">
+            🛡️ We don’t spam. Your info is used only to confirm your appointment and follow up about your project.
+          </p>
+        </div>
+      </div>
+
+      {/* Subtle divider */}
+      <div className="h-px w-full bg-gradient-to-r from-transparent via-black/10 to-transparent" />
+    </div>
+
+    {/* Booking card */}
+    <div className="rounded-2xl border bg-white shadow-sm overflow-hidden">
+      <div className="flex flex-col gap-2 px-6 py-5 border-b bg-muted/20">
+        <div className="flex items-center justify-between">
+          <div className="text-sm font-semibold">Schedule your consultation</div>
+          <div className="text-xs text-muted-foreground">
+            Takes ~30 seconds
+          </div>
+        </div>
+
+        {/* Micro-urgency without cringe */}
+        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+          <span className="inline-flex h-2 w-2 rounded-full bg-green-500 animate-pulse" />
+          <span>Limited slots weekly — lock yours in now.</span>
+        </div>
+      </div>
+
+      <div className="p-4 sm:p-6">
+        <div className="rounded-xl border bg-white overflow-hidden">
+          <iframe
+            src={GHL_BOOKING_IFRAME_SRC}
+            title="Leon’s Booking"
+            className="w-full"
+            style={{
+              border: "none",
+              height:
+                typeof window !== "undefined" && window.innerWidth < 640
+                  ? "1150px"
+                  : "940px",
+            }}
+            scrolling="no"
+          />
+        </div>
+
+        <div className="mt-4 flex flex-col sm:flex-row gap-3">
+          <Button onClick={goToCamera} size="lg" className="w-full">
+            <Scan className="mr-2 h-5 w-5" />
+            Preview Floors in AR
+          </Button>
+
+          <Button
+            variant="outline"
+            size="lg"
+            className="w-full bg-transparent"
+            onClick={() => window.location.reload()}
+          >
+            <ArrowLeft className="mr-2 h-4 w-4" />
+            Edit my details
+          </Button>
+        </div>
+
+        <p className="mt-3 text-xs text-muted-foreground">
+          Prefer text? After booking, you’ll get a confirmation message — reply with photos or notes to speed up your estimate.
+        </p>
       </div>
     </div>
-  );
-}
+  </div>
+)}
+
 
 function SelectBlock({
   label,
