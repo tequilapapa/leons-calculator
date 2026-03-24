@@ -1,15 +1,21 @@
-// app/api/lead/route.ts
 import { NextResponse } from "next/server";
+import { createClient } from "@supabase/supabase-js";
 
-const GHL_WEBHOOK_URL =
-  "https://services.leadconnectorhq.com/hooks/xPGp97UEGHbh48A0Th2k/webhook-trigger/KPSybbyk8eorfRLV5sO9";
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+const wixWebhookUrl = process.env.WIX_WEBHOOK_URL || "";
+
+if (!supabaseUrl || !supabaseServiceRoleKey) {
+  throw new Error("Missing Supabase environment variables");
+}
+
+const supabase = createClient(supabaseUrl, supabaseServiceRoleKey);
 
 // Helper: convert FormData → plain object
 function formDataToObject(formData: FormData) {
   const obj: Record<string, any> = {};
 
   formData.forEach((value, key) => {
-    // Support multiple values for same key (e.g. images[])
     if (key in obj) {
       if (Array.isArray(obj[key])) {
         obj[key].push(value);
@@ -24,20 +30,50 @@ function formDataToObject(formData: FormData) {
   return obj;
 }
 
+function normalizeLead(incoming: Record<string, any>, req: Request) {
+  const name = incoming.name || incoming.fullName || null;
+  const email = incoming.email || null;
+  const phone = incoming.phone || null;
+
+  return {
+    name,
+    email,
+    phone,
+    source: incoming.source || "leons-calculator",
+    project_type: incoming.projectType || incoming.project_type || null,
+    status: "new",
+    address: incoming.address || incoming.projectAddress || null,
+    city: incoming.city || null,
+    state: incoming.state || null,
+    zip: incoming.zip || null,
+    sqft: incoming.sqft || incoming.squareFeet || null,
+    timeline: incoming.timeline || null,
+    budget: incoming.budget || null,
+    condition: incoming.condition || null,
+    payload: incoming,
+    meta: {
+      preferredDate: incoming.preferredDate || incoming.date || null,
+      referer: req.headers.get("referer"),
+      userAgent: req.headers.get("user-agent"),
+      timestamp: new Date().toISOString(),
+    },
+    camera_assets:
+      incoming.cameraAssets || incoming.images || incoming.photos || null,
+    wix_sync: null,
+  };
+}
+
 export async function POST(req: Request) {
   try {
     const contentType = req.headers.get("content-type") || "";
-
-    let incoming: any;
+    let incoming: Record<string, any>;
 
     if (contentType.includes("application/json")) {
-      // Calculator / camera sending JSON
       incoming = await req.json();
     } else if (
       contentType.includes("multipart/form-data") ||
       contentType.includes("application/x-www-form-urlencoded")
     ) {
-      // In case you ever POST a regular form
       const formData = await req.formData();
       incoming = formDataToObject(formData);
     } else {
@@ -47,7 +83,6 @@ export async function POST(req: Request) {
       );
     }
 
-    // Basic sanity: we want at least *something* to identify them
     const { name, fullName, email, phone } = incoming;
 
     if (!name && !fullName && !email && !phone) {
@@ -61,52 +96,86 @@ export async function POST(req: Request) {
       );
     }
 
-    // Normalize a bit + add meta. Everything else gets passed through.
-    const payload = {
-      ...incoming,
-      // Soft normalize common fields (GHL will map these on the webhook screen)
-      name: name || fullName,
-      email,
-      phone,
-      // Helpful meta for mapping & reporting inside GHL
-      _meta: {
-        source: incoming.source || "leons-calculator",
-        projectType: incoming.projectType || incoming.project_type || null,
-        sqft: incoming.sqft || incoming.squareFeet || null,
-        condition: incoming.condition || null,
-        preferredDate: incoming.preferredDate || incoming.date || null,
-        timestamp: new Date().toISOString(),
-        userAgent: req.headers.get("user-agent"),
-        referer: req.headers.get("referer"),
-      },
-    };
+    const lead = normalizeLead(incoming, req);
 
-    // Fire into GoHighLevel inbound webhook
-    const ghlRes = await fetch(GHL_WEBHOOK_URL, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(payload),
-    });
+    // 1) Save to Supabase first
+    const { data, error } = await supabase
+      .from("leads")
+      .insert([lead])
+      .select("id")
+      .single();
 
-    if (!ghlRes.ok) {
-      const text = await ghlRes.text().catch(() => "");
-      console.error("GHL webhook failed:", ghlRes.status, text);
-
+    if (error) {
+      console.error("Supabase insert failed:", error);
       return NextResponse.json(
-        {
-          ok: false,
-          error: "Failed to send lead to GoHighLevel",
-          status: ghlRes.status,
-        },
-        { status: 502 }
+        { ok: false, error: "Failed to store lead" },
+        { status: 500 }
       );
     }
 
-    return NextResponse.json({ ok: true });
+    // 2) Optional Wix webhook sync
+    if (wixWebhookUrl) {
+      const wixPayload = {
+        leadId: data.id,
+        name: lead.name,
+        email: lead.email,
+        phone: lead.phone,
+        source: lead.source,
+        projectType: lead.project_type,
+        address: lead.address,
+        city: lead.city,
+        state: lead.state,
+        zip: lead.zip,
+        sqft: lead.sqft,
+        timeline: lead.timeline,
+        submittedAt: lead.meta.timestamp,
+      };
+
+      try {
+        const wixRes = await fetch(wixWebhookUrl, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(wixPayload),
+        });
+
+        const wixSync = {
+          attempted: true,
+          status: wixRes.status,
+          ok: wixRes.ok,
+          syncedAt: new Date().toISOString(),
+        };
+
+        await supabase.from("leads").update({ wix_sync: wixSync }).eq("id", data.id);
+
+        if (!wixRes.ok) {
+          const text = await wixRes.text().catch(() => "");
+          console.error("Wix webhook failed:", wixRes.status, text);
+        }
+      } catch (wixErr) {
+        console.error("Wix webhook request error:", wixErr);
+
+        await supabase
+          .from("leads")
+          .update({
+            wix_sync: {
+              attempted: true,
+              ok: false,
+              error: "Webhook request failed",
+              syncedAt: new Date().toISOString(),
+            },
+          })
+          .eq("id", data.id);
+      }
+    }
+
+    return NextResponse.json({
+      ok: true,
+      leadId: data.id,
+    });
   } catch (err) {
-    console.error("Error in /api/lead:", err);
+    console.error("Error in /api/leads:", err);
     return NextResponse.json(
       { ok: false, error: "Internal server error" },
       { status: 500 }
