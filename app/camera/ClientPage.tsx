@@ -10,7 +10,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Ruler, DollarSign, ChevronRight, X, Check, Scan } from 'lucide-react';
-import ReviewsWidget from '@/components/reviews-widget';
+import ReviewsCarousel from '@/components/reviews-carousel';
 
 type WoodProfile = {
   id: string;
@@ -218,7 +218,7 @@ export default function ClientPage() {
             <form onSubmit={handleSubmitLead} className="p-6">
               {/* your inputs */}
               <Button type="submit" className="w-full bg-orange-600 hover:bg-orange-700">Submit Quote Request</Button>
-              <ReviewsWidget variant="floating" title="Customers love Leon’s" />
+              <ReviewsCarousel />
             </form>
           </Card>
         </div>

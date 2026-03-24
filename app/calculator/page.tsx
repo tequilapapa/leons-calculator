@@ -4,7 +4,7 @@ import { Suspense, useEffect, useMemo, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import KitchenEstimator from '@/components/kitchen-estimator';
-import ReviewsWidget from '@/components/reviews-widget';
+import ReviewsCarousel from '@/components/reviews-carousel';
 
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -913,10 +913,7 @@ function CalculatorPageContent() {
                     </div>
 
                     <div className="mx-auto max-w-md">
-                      <ReviewsWidget
-                        variant="inline"
-                        title="Customers love Leon’s"
-                      />
+                      <ReviewsCarousel />
                     </div>
 
                     <div className="space-y-3 pt-4">
@@ -1024,7 +1021,7 @@ function CalculatorPageContent() {
                 </div>
               </Card>
 
-              <ReviewsWidget variant="inline" title="Customers love Leon’s" />
+              <ReviewsCarousel />
             </div>
           </div>
         )}
