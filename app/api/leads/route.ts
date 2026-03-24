@@ -1,15 +1,28 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-const wixWebhookUrl = process.env.WIX_WEBHOOK_URL || "";
+export const dynamic = "force-dynamic";
 
-if (!supabaseUrl || !supabaseServiceRoleKey) {
-  throw new Error("Missing Supabase environment variables");
+function getEnv() {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const wixWebhookUrl = process.env.WIX_WEBHOOK_URL || "";
+
+  if (!supabaseUrl || !supabaseServiceRoleKey) {
+    throw new Error("Missing Supabase environment variables");
+  }
+
+  return {
+    supabaseUrl,
+    supabaseServiceRoleKey,
+    wixWebhookUrl,
+  };
 }
 
-const supabase = createClient(supabaseUrl, supabaseServiceRoleKey);
+function getSupabase() {
+  const { supabaseUrl, supabaseServiceRoleKey } = getEnv();
+  return createClient(supabaseUrl, supabaseServiceRoleKey);
+}
 
 // Helper: convert FormData → plain object
 function formDataToObject(formData: FormData) {
@@ -65,6 +78,9 @@ function normalizeLead(incoming: Record<string, any>, req: Request) {
 
 export async function POST(req: Request) {
   try {
+    const supabase = getSupabase();
+    const { wixWebhookUrl } = getEnv();
+
     const contentType = req.headers.get("content-type") || "";
     let incoming: Record<string, any>;
 
@@ -98,7 +114,6 @@ export async function POST(req: Request) {
 
     const lead = normalizeLead(incoming, req);
 
-    // 1) Save to Supabase first
     const { data, error } = await supabase
       .from("leads")
       .insert([lead])
@@ -113,7 +128,6 @@ export async function POST(req: Request) {
       );
     }
 
-    // 2) Optional Wix webhook sync
     if (wixWebhookUrl) {
       const wixPayload = {
         leadId: data.id,
@@ -147,7 +161,10 @@ export async function POST(req: Request) {
           syncedAt: new Date().toISOString(),
         };
 
-        await supabase.from("leads").update({ wix_sync: wixSync }).eq("id", data.id);
+        await supabase
+          .from("leads")
+          .update({ wix_sync: wixSync })
+          .eq("id", data.id);
 
         if (!wixRes.ok) {
           const text = await wixRes.text().catch(() => "");
