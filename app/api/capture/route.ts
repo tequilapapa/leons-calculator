@@ -6,6 +6,9 @@ export const dynamic = 'force-dynamic';
 
 type CaptureRequestBody = {
   imageDataUrl?: string;
+  arSessionId?: string | null;
+  woodProfileId?: string | null;
+  patternCode?: string | null;
   lead?: {
     leadId?: string;
     sessionToken?: string;
@@ -15,13 +18,7 @@ type CaptureRequestBody = {
     source?: string;
     wixContactId?: string;
   };
-  selections?: {
-    species?: string;
-    grade?: string;
-    stain?: string;
-    finish?: string;
-    layout?: string;
-  };
+  selections?: Record<string, unknown>;
   metadata?: Record<string, unknown>;
 };
 
@@ -63,10 +60,7 @@ function getSupabaseAdmin() {
   }
 
   return createClient(supabaseUrl, serviceRoleKey, {
-    auth: {
-      autoRefreshToken: false,
-      persistSession: false,
-    },
+    auth: { autoRefreshToken: false, persistSession: false },
   });
 }
 
@@ -101,7 +95,10 @@ export async function POST(req: NextRequest) {
 
     const bucketName = process.env.SUPABASE_CAMERA_BUCKET || 'camera-captures';
     const leadId = sanitizePathSegment(body.lead?.leadId, 'anonymous');
-    const sessionToken = sanitizePathSegment(body.lead?.sessionToken, 'session');
+    const sessionToken = sanitizePathSegment(
+      body.arSessionId || body.lead?.sessionToken,
+      'session'
+    );
     const fileName = `${Date.now()}-${crypto.randomUUID()}.${extension}`;
     const filePath = `${leadId}/${sessionToken}/${fileName}`;
 
@@ -135,17 +132,48 @@ export async function POST(req: NextRequest) {
       signedUrl,
     };
 
+    if (body.arSessionId) {
+      const { data: currentSession } = await supabase
+        .from('ar_sessions')
+        .select('capture_count')
+        .eq('id', body.arSessionId)
+        .single();
+
+      await supabase.from('ar_sessions').update({
+        current_capture_url: captureResult.publicUrl,
+        capture_count: (currentSession?.capture_count || 0) + 1,
+        last_activity_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      }).eq('id', body.arSessionId);
+
+      await supabase.from('camera_captures').insert({
+        ar_session_id: body.arSessionId,
+        lead_id: body.lead?.leadId || null,
+        wood_profile_id: body.woodProfileId || null,
+        pattern_code: body.patternCode || null,
+        capture_type: String(body.metadata?.captureType || 'manual'),
+        image_url: captureResult.publicUrl,
+        storage_bucket: captureResult.bucket,
+        storage_path: captureResult.path,
+        preview_url: captureResult.publicUrl,
+        device_info: {
+          userAgent: body.metadata?.userAgent || null,
+          viewport: body.metadata?.viewport || null,
+        },
+        capture_meta: {
+          selections: body.selections || {},
+          metadata: body.metadata || {},
+          signedUrl: captureResult.signedUrl,
+        },
+      });
+    }
+
     const wixWebhookUrl = process.env.WIX_WEBHOOK_URL;
-    let wix: {
-      enabled: boolean;
-      ok: boolean;
-      status: number | null;
-      response: unknown;
-    } = {
+    let wix = {
       enabled: Boolean(wixWebhookUrl),
       ok: false,
-      status: null,
-      response: null,
+      status: null as number | null,
+      response: null as unknown,
     };
 
     if (wixWebhookUrl) {
@@ -160,9 +188,7 @@ export async function POST(req: NextRequest) {
 
       const wixResponse = await fetch(wixWebhookUrl, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(wixPayload),
       });
 
